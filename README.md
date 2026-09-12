@@ -46,9 +46,15 @@ pytest -q -o addopts= tests
 
 Tests are offline: they use an injected fake runner and temporary manifests, never the weights.
 
+## Tutorial
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kurtvalcorza/qwen3-reranker-pipeline/blob/main/tutorials/qwen3_reranker_colab.ipynb)
+
+`tutorials/qwen3_reranker_colab.ipynb` is declared `TASK-INFERENCE` (see `tutorials/README.md`). Its default path authors a synthetic query with three candidate passages, surfaces `MAX_PAIRS`/`MAX_TEXT_CHARS`/`MAX_TEXT_TOKENS` and the default instruction, stages the missing snapshot file with `stage_missing_files(..., allow_download=True)` and digest-verifies it with `verify_snapshot`, reranks through the public API, prints the scores and ranking with their semantics (relevance score, not a calibrated probability; no threshold), and exports the ranking with identifiers plus provenance JSON. No metric is reported: the repository ships no metric helper and the sample has no relevance judgements. BYOD is optional and gated off by default.
+
 ## Release status
 
-**Candidate / source-complete** (`STATUS.md`). Card pass only; no tutorial notebook yet.
+**Candidate.** Static/unit checks do not constitute clean-runtime notebook evidence. Complete `docs/release-verification.md` against the exact release revision before calling the notebook release-grade.
 
 ## Licensing
 

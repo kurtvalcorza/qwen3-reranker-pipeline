@@ -1,3 +1,3 @@
 # Release status
 
-Current status: **Candidate / source-complete**. This revision is the model-card pass only: pipeline package, offline unit tests, one executed CPU smoke load from the pinned snapshot, and `MODEL_CARD.md` against MODEL_CARD_SPEC 1.1. No tutorial notebook exists yet; the notebook pass (NOTEBOOK_SPEC 1.0) follows separately, and nothing here is clean-runtime notebook evidence.
+Current status: **Candidate** — tutorial source complete, awaiting clean-runtime execution. The pipeline package, offline unit tests, one executed CPU smoke load from the pinned snapshot, `MODEL_CARD.md`, and the `TASK-INFERENCE` tutorial notebook `tutorials/qwen3_reranker_colab.ipynb` with its static validator and CI workflow exist. Unit tests and static conformance checks are expected to run in GitHub Actions. The tutorial remains non-release-grade until clean-runtime execution evidence for the exact candidate commit is recorded according to `docs/release-verification.md`.
