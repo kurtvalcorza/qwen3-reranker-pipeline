@@ -20,7 +20,11 @@ base_model: Qwen/Qwen3-Reranker-0.6B
 
 ## Interactive Colab Tutorials
 
-This release ships no tutorial notebook (`tutorials/` is absent). The package is exercised through its test suite (`tests/`) and the run instructions in the README; a `NOTEBOOK_SPEC` 1.0 `TASK-INFERENCE` notebook is a follow-up, not a claim this card makes.
+This pipeline provides a ready-to-run interactive Google Colab notebook that exercises the repository's public API end to end — bootstrap a fresh runtime, stage and verify the pinned upstream revision, validate an input, run the task, and inspect and export the outputs:
+
+- **Task Inference Tutorial**:  
+  [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kurtvalcorza/qwen3-reranker-pipeline/blob/main/tutorials/qwen3_reranker_colab.ipynb) [`qwen3_reranker_colab.ipynb`](https://github.com/kurtvalcorza/qwen3-reranker-pipeline/blob/main/tutorials/qwen3_reranker_colab.ipynb)  
+  *Pointwise query–document reranking with the pinned `Qwen/Qwen3-Reranker-0.6B` weights on a synthetic query with three candidates: `yes`-share softmax relevance scores (uncalibrated, no threshold) and a stable ranking; no metric is reported.*
 
 ---
 
