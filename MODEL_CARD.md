@@ -3,6 +3,8 @@ license: apache-2.0
 model_card_spec: "1.1"
 pipeline_tag: text-ranking
 base_model: Qwen/Qwen3-Reranker-0.6B
+date_published: "2025-05-29"
+date_published_source: "Hugging Face Hub repository creation date of the exact hosted checkpoint (`createdAt`, https://huggingface.co/api/models/Qwen/Qwen3-Reranker-0.6B)"
 ---
 
 # Qwen3-Reranker-0.6B (DIMER package v0.1.0) — Text Reranking Model (Cross-Encoder)
@@ -11,7 +13,6 @@ base_model: Qwen/Qwen3-Reranker-0.6B
 [![Upstream GitHub](https://img.shields.io/badge/Upstream%20GitHub-QwenLM%2FQwen3--Embedding-181717?style=flat&logo=github&logoColor=white)](https://github.com/QwenLM/Qwen3-Embedding)
 [![arXiv Paper](https://img.shields.io/badge/arXiv-2506.05176-b31b1b.svg)](https://arxiv.org/abs/2506.05176)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Pipeline](https://img.shields.io/badge/Pipeline-qwen3--reranker--pipeline-2ea44f?style=flat&logo=github)](https://github.com/kurtvalcorza/qwen3-reranker-pipeline)
 
 > [!WARNING]
 > ⚠️ **Provided for research, training, and evaluation purposes only.** Model weights are redistributed unmodified under their upstream license, which controls your use, including any commercial use or redistribution; the accompanying code and notebooks are released under this repository's license. All of it is supplied **"as is"**, without warranty of any kind, and has not been validated for production, clinical, or safety-critical use. Running the notebooks downloads third-party weights and datasets governed by their own licenses and consumes compute on your own Colab/Kaggle account. To the maximum extent permitted by law, the maintainers of this repository and the DIMER platform accept no liability for any damages arising from their use. Hosting implies no affiliation with or endorsement by the original authors.
@@ -28,7 +29,7 @@ This pipeline provides a ready-to-run interactive Google Colab notebook that exe
 
 ---
 
-###### Description
+#### Description
 
 `Qwen/Qwen3-Reranker-0.6B` is the smallest reranker of the Qwen3 Embedding series (Zhang et al., arXiv:2506.05176), pinned here to revision `e61197ed45024b0ed8a2d74b80b4d909f1255473`. The upstream README states it is built on `Qwen/Qwen3-0.6B-Base`; the pinned `config.json` is a `Qwen3ForCausalLM` decoder with 28 layers, hidden size 1024, 16 attention heads over 8 key-value heads, and a 40,960-token position budget. It is used as a pointwise cross-encoder: the query and one document are written into a fixed chat prompt that asks whether the document meets the query's requirements, the decoder runs one forward pass, and the score is the softmax over the logits of the tokens `no` and `yes` (ids 2152 and 9693, pinned by the snapshot's `1_LogitScore/config.json`) at the last position — the model never generates text. Nothing is trained or conditioned in this repository. What it adds is the `Qwen3RerankerPipeline` class in `src/qwen3_reranker_pipeline/pipeline.py`: manifest verification (`verify_snapshot`), fresh-clone staging (`stage_missing_files`), a loader that refuses remote code and cross-checks the yes/no token ids, input validation with named ceilings, the README's exact prompt and scoring contract, and provenance fields in every result.
 
