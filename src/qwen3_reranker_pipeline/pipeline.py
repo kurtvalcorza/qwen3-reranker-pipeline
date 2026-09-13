@@ -232,11 +232,6 @@ class Qwen3RerankerPipeline:
         weights_dir: str | Path | None = None,
         allow_download: bool = False,
     ) -> Qwen3RerankerPipeline:
-        import torch
-        from transformers import AutoModelForCausalLM, AutoTokenizer
-
-        resolved_device = device or ("cuda:0" if torch.cuda.is_available() else "cpu")
-        dtype = torch.bfloat16 if resolved_device.startswith("cuda") else torch.float32
         root = Path(weights_dir) if weights_dir is not None else DEFAULT_WEIGHTS_DIR
         if (root / MANIFEST_NAME).is_file():
             stage_missing_files(root, allow_download=allow_download)
@@ -246,6 +241,11 @@ class Qwen3RerankerPipeline:
             source, kwargs = MODEL_ID, dict(revision=MODEL_REVISION)
         else:
             raise FileNotFoundError(f"no verified snapshot at {root} and allow_download=False")
+        # Refuse invalid snapshots before importing model libraries.
+        import torch
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+        resolved_device = device or ("cuda:0" if torch.cuda.is_available() else "cpu")
+        dtype = torch.bfloat16 if resolved_device.startswith("cuda") else torch.float32
         tokenizer = AutoTokenizer.from_pretrained(
             source, padding_side="left", trust_remote_code=False, **kwargs
         )
