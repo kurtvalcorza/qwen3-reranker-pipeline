@@ -1,6 +1,7 @@
 from .pipeline import (
     DEFAULT_INSTRUCTION,
     DEFAULT_WEIGHTS_DIR,
+    INPUT_SCHEMA,
     MAX_PAIRS,
     MAX_TEXT_CHARS,
     MAX_TEXT_TOKENS,
@@ -9,13 +10,16 @@ from .pipeline import (
     MODEL_LICENSE,
     MODEL_REVISION,
     Qwen3RerankerPipeline,
+    evaluation_report,
     stage_missing_files,
+    validate_inputs,
     verify_snapshot,
 )
 
 __all__ = [
     "DEFAULT_INSTRUCTION",
     "DEFAULT_WEIGHTS_DIR",
+    "INPUT_SCHEMA",
     "MAX_PAIRS",
     "MAX_TEXT_CHARS",
     "MAX_TEXT_TOKENS",
@@ -24,6 +28,8 @@ __all__ = [
     "MODEL_LICENSE",
     "MODEL_REVISION",
     "Qwen3RerankerPipeline",
+    "evaluation_report",
     "stage_missing_files",
+    "validate_inputs",
     "verify_snapshot",
 ]

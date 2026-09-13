@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -106,6 +106,118 @@ def format_pair(query: str, document: str, instruction: str = DEFAULT_INSTRUCTIO
     return f"<Instruct>: {instruction}\n<Query>: {query}\n<Document>: {document}"
 
 
+INPUT_SCHEMA: dict[str, Any] = {
+    "input": "sequence of (query, document) pairs of two non-empty str; one score is returned per pair",
+    "pairs": [1, MAX_PAIRS],
+    "text_chars": [1, MAX_TEXT_CHARS],
+    "prompt_tokens": [1, MAX_TEXT_TOKENS],
+    "score_range": [0.0, 1.0],
+    "preprocessing": (
+        "each pair becomes '<Instruct>: <instruction>\\n<Query>: …\\n<Document>: …' between the fixed "
+        "upstream PREFIX and SUFFIX, truncated longest-first to fit MAX_TEXT_TOKENS; the score is the "
+        "two-way softmax share of the yes logit against the no logit at the last position"
+    ),
+}
+
+
+def _check_inputs(pairs: Any, instruction: str) -> list[tuple[str, str]]:
+    """Raise TypeError/ValueError naming the first violated ceiling; return the pairs as a list."""
+    if isinstance(pairs, str | bytes) or not isinstance(pairs, Sequence):
+        raise TypeError("pairs must be a list of (query, document) pairs")
+    if not 1 <= len(pairs) <= MAX_PAIRS:
+        raise ValueError(f"pairs must hold 1..{MAX_PAIRS} items, got {len(pairs)}")
+    for i, pair in enumerate(pairs):
+        if isinstance(pair, str | bytes) or not isinstance(pair, Sequence) or len(pair) != 2:
+            raise TypeError(f"pairs[{i}] must be a (query, document) pair of two str")
+        for name, text in zip(("query", "document"), pair, strict=True):
+            if not isinstance(text, str):
+                raise TypeError(f"pairs[{i}] {name} must be str, got {type(text).__name__}")
+            if not text.strip():
+                raise ValueError(f"pairs[{i}] {name} is empty")
+            if len(text) > MAX_TEXT_CHARS:
+                raise ValueError(f"pairs[{i}] {name} has {len(text)} chars; ceiling is {MAX_TEXT_CHARS}")
+    if not isinstance(instruction, str) or not instruction.strip():
+        raise ValueError("instruction must be a non-empty str")
+    return [(pair[0], pair[1]) for pair in pairs]
+
+
+def validate_inputs(
+    pairs: Sequence[Sequence[str]],
+    instruction: str = DEFAULT_INSTRUCTION,
+    *,
+    names: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """Validation stage: return the input manifest (schema, per-pair observations, verdict).
+
+    Rejection is reported by raising exactly as ``rerank`` would — both route through
+    ``_check_inputs``. Prompt-level truncation cannot be observed here because it happens inside
+    the tokenizer; ``rerank`` reports it in ``truncated``.
+    """
+    checked = _check_inputs(pairs, instruction)
+    if names is not None and len(names) != len(checked):
+        raise ValueError("names must have one entry per pair")
+    return {
+        "schema": dict(INPUT_SCHEMA),
+        "inputs": [
+            {
+                "id": names[i] if names else f"pair-{i}",
+                "query_chars": len(query),
+                "document_chars": len(document),
+            }
+            for i, (query, document) in enumerate(checked)
+        ],
+        "n_pairs": len(checked),
+        "instruction": instruction,
+        "verdict": "accepted",
+        "findings": [],
+        "model_id": MODEL_ID,
+        "model_revision": MODEL_REVISION,
+    }
+
+
+def evaluation_report(
+    result: Mapping[str, Any], judgements: Sequence[Any] | None = None, *, sample_kind: str = "synthetic"
+) -> dict[str, Any]:
+    """Evaluation stage: a machine-readable report even though no metric exists here.
+
+    The repository ships no ranking-metric helper, so the verdict is always ``not-measurable``
+    (EVAL9), including when ``judgements`` is supplied: the parameter exists for interface parity
+    with the fleet's other pipelines and is recorded in ``reason`` rather than scored. Inventing
+    nDCG or MRR here would hide the fact that a real evaluation needs judged candidates over many
+    queries and the caller's own metric code.
+    """
+    scores = result["scores"]
+    supplied = judgements is not None
+    return {
+        "task": "pointwise query-document relevance reranking",
+        "score_semantics": (
+            f"{SCORE_KIND}: the softmax share of the yes logit against the no logit, in [0, 1]; it "
+            "orders candidates for one query, is not comparable as an absolute value across queries "
+            "or instructions, and carries no shipped acceptance threshold"
+        ),
+        "sample_kind": sample_kind,
+        "n_pairs": len(scores),
+        "metrics": [],
+        "baselines": [],
+        "verdict": "not-measurable",
+        "reason": (
+            "ranking quality needs relevance judgements and the repository ships no metric helper"
+            + (
+                "; judgements were supplied but no metric helper exists to score them here"
+                if supplied
+                else "; the evaluated sample carries none"
+            )
+        ),
+        "needs": (
+            "per-query relevance judgements (binary or graded) over enough queries to state a "
+            "dispersion, scored with the caller's own nDCG@k, MRR or precision@k code; a single "
+            "query's ordering is a plumbing check, not a retrieval measurement"
+        ),
+        "model_id": MODEL_ID,
+        "model_revision": MODEL_REVISION,
+    }
+
+
 @dataclass
 class Qwen3RerankerPipeline:
     """Pointwise reranker. `_runner` maps pair bodies to ([no, yes] last-position logits, token counts)."""
@@ -165,29 +277,16 @@ class Qwen3RerankerPipeline:
 
         return cls(runner, resolved_device)
 
+    def _validate(self, pairs: Any, instruction: str) -> list[tuple[str, str]]:
+        return _check_inputs(pairs, instruction)
+
     def rerank(
         self,
         pairs: Sequence[Sequence[str]],
         instruction: str = DEFAULT_INSTRUCTION,
     ) -> dict[str, Any]:
         """Score up to MAX_PAIRS (query, document) pairs; `scores` align with `pairs`; no threshold."""
-        if isinstance(pairs, str | bytes) or not isinstance(pairs, Sequence):
-            raise TypeError("pairs must be a list of (query, document) pairs")
-        if not 1 <= len(pairs) <= MAX_PAIRS:
-            raise ValueError(f"pairs must hold 1..{MAX_PAIRS} items, got {len(pairs)}")
-        for i, pair in enumerate(pairs):
-            if isinstance(pair, str | bytes) or not isinstance(pair, Sequence) or len(pair) != 2:
-                raise TypeError(f"pairs[{i}] must be a (query, document) pair of two str")
-            for name, text in zip(("query", "document"), pair, strict=True):
-                if not isinstance(text, str):
-                    raise TypeError(f"pairs[{i}] {name} must be str, got {type(text).__name__}")
-                if not text.strip():
-                    raise ValueError(f"pairs[{i}] {name} is empty")
-                if len(text) > MAX_TEXT_CHARS:
-                    raise ValueError(f"pairs[{i}] {name} has {len(text)} chars; ceiling is {MAX_TEXT_CHARS}")
-        if not isinstance(instruction, str) or not instruction.strip():
-            raise ValueError("instruction must be a non-empty str")
-
+        pairs = self._validate(pairs, instruction)
         bodies = [format_pair(q, d, instruction) for q, d in pairs]
         logits, n_tokens = self._runner(bodies)
         logits = np.asarray(logits, dtype=np.float64)
