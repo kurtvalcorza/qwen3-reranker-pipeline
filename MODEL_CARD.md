@@ -2,6 +2,7 @@
 license: apache-2.0
 model_card_spec: "1.1"
 pipeline_tag: text-ranking
+task: "Others - Text Reranking"
 base_model: Qwen/Qwen3-Reranker-0.6B
 date_published: "2025-05-29"
 date_published_source: "Hugging Face Hub repository creation date of the exact hosted checkpoint (`createdAt`, https://huggingface.co/api/models/Qwen/Qwen3-Reranker-0.6B)"
