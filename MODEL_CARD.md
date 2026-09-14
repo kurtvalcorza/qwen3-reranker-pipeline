@@ -127,7 +127,7 @@ The pipeline must not be used to rank people against a prototype for employment,
 
 ## Runtime
 
-- Pins (`pyproject.toml`): `torch==2.14.0`, `transformers==4.57.6`, `huggingface-hub==0.36.2`, `safetensors==0.8.0`, `numpy==2.5.3`; dev `pytest==8.4.2`, `ruff==0.16.6`. Python 3.12, Windows venv `dimer-next16`.
+- Pins (`pyproject.toml`): `torch==2.14.0`, `torchvision==0.29.0`, `torchaudio==2.11.0`, `transformers==4.57.6`, `huggingface-hub==0.36.2`, `safetensors==0.8.0`, `numpy==2.5.3`; dev `pytest==8.4.2`, `ruff==0.16.6`. Python 3.12, Windows venv `dimer-next16`.
 - Executed 2026-09-12: `CUDA_VISIBLE_DEVICES=-1 python -m pytest -q -o addopts= tests` — 18 passed, exit 0; `ruff check src tests` clean.
 - Smoke, executed on CPU (`CUDA_VISIBLE_DEVICES=-1`, `from_pretrained(device="cpu")`, float32): the README's two query/document pairs plus the two swapped pairs; load 5.11 s, scoring 0.999 s, 6.11 s total; scores [0.9995, 0.9994, 0.0000, 0.0000], `ranking` [0, 1, 3, 2], `n_tokens` [85, 104, 108, 81], no truncation. Transformers logs one informational line about calling `pad` after `__call__` on a fast tokenizer; that is the README's own two-step encoding and is expected.
 - Not executed: the CUDA/bfloat16 path, the `allow_download=True` Hub path, prompts near the 8,192-token ceiling against the real model, and any labelled ranking evaluation.
