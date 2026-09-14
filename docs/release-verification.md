@@ -87,7 +87,7 @@ A known-failing default path in the supported runtime blocks release.
 
 | Notebook | Commit / notebook blob | Date (UTC) | Executor | Outcome |
 |---|---|---|---|---|
-| `tutorials/qwen3_reranker_colab.ipynb` | | | | pending — queued to the GPU lane |
+| `qwen3_reranker_colab.ipynb` | `0c652a2` / `a21e5a860c0f` | 2026-09-14 | Kaggle T4 (`kurtvalcorza/dimer-nb2-qwen3-reranker` v2) | PASS — 8/8 ok (1 restart after install cell) |
 
 ## Recorded executions
 
@@ -101,7 +101,7 @@ package, not this notebook, and is not notebook execution evidence.
 
 | Date (UTC) | Commit / notebook blob | Executor | Path exercised | Wall | Outcome |
 |---|---|---|---|---|---|
-| — | — | — | Default sample path | — | pending — queued to the GPU lane |
+| 2026-09-14 | `0c652a2` / `a21e5a860c0f` | Kaggle T4 (`kurtvalcorza/dimer-nb2-qwen3-reranker` v2) | Default sample path | 236.4 s | **PASSED** — 8/8 ok code cells executed cleanly, 28 files, 1207 MB staged |
 
 ## Current status
 
