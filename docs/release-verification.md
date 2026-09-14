@@ -63,7 +63,7 @@ Before changing the registry status from `Candidate` to `Release-grade`:
    defaults for the sample path: `USE_BYOD = False`);
 4. verify that Section 1 reports `NOTEBOOK_SOURCE.repository_revision` equal to the revision recorded in
    `metadata.dimer.generated_from` and that the installed core package versions equal the inline `PINS` (= the
-   `pyproject.toml` pins (`torch==2.14.0`, `transformers==4.57.6`, `huggingface-hub==0.36.2`, `safetensors==0.8.0`, `numpy==2.5.3`);
+   `pyproject.toml` pins (`torch==2.14.0`, `torchvision==0.29.0`, `torchaudio==2.11.0`, `transformers==4.57.6`, `huggingface-hub==0.36.2`, `safetensors==0.8.0`, `numpy==2.5.3`);
 5. verify every default-path stage completes:
    - pinned runtime installed from the inline `PINS` with no GitHub access;
    - the carried module cell executing (defining `Qwen3RerankerPipeline`, `validate_inputs`, `evaluation_report` and the ceilings) with no import of the repository package;
@@ -87,7 +87,7 @@ A known-failing default path in the supported runtime blocks release.
 
 | Notebook | Commit / notebook blob | Date (UTC) | Executor | Outcome |
 |---|---|---|---|---|
-| `tutorials/qwen3_reranker_colab.ipynb` | | | | pending — queued to the GPU lane |
+| `qwen3_reranker_colab.ipynb` | `0c652a2` / `a21e5a860c0f` | 2026-09-14 | Kaggle T4 (`kurtvalcorza/dimer-nb2-qwen3-reranker` v2) | PASS — 8/8 ok (1 restart after install cell) |
 
 ## Recorded executions
 
@@ -101,7 +101,7 @@ package, not this notebook, and is not notebook execution evidence.
 
 | Date (UTC) | Commit / notebook blob | Executor | Path exercised | Wall | Outcome |
 |---|---|---|---|---|---|
-| — | — | — | Default sample path | — | pending — queued to the GPU lane |
+| 2026-09-14 | `0c652a2` / `a21e5a860c0f` | Kaggle T4 (`kurtvalcorza/dimer-nb2-qwen3-reranker` v2) | Default sample path | 236.4 s | **PASSED** — 8/8 ok code cells executed cleanly, 28 files, 1207 MB staged |
 
 ## Current status
 
