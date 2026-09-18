@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
+import time
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +34,29 @@ MAX_TEXT_TOKENS = 8192  # total prompt length incl. prefix/suffix; the pair is t
 MAX_TEXT_CHARS = 100_000  # per query or document, pre-tokenisation guard
 MAX_PAIRS = 32  # (query, document) pairs per rerank() call
 SCORE_KIND = "relevance score, not a calibrated probability"
+WEIGHT_FILE = "model.safetensors"
+WEIGHT_SHA256 = (
+    "27cd75a405b9c1b46b59abfd88aaa209e6fed2a1972cde9b70e7659537c5e65b"  # manifest digest of WEIGHT_FILE
+)
+PARAMETER_COUNT = 595_776_512  # Qwen3ForCausalLM with the output projection tied to the token embeddings
+DECODER_LAYERS = 28  # config.json num_hidden_layers
+DEFAULT_TRAINABLE_LAYERS = 2  # the last two decoder layers (31,461,888 parameters)
+MAX_TRAIN_TOKENS = 192  # training-only prompt ceiling (inference truncates the pair to MAX_TEXT_TOKENS)
+MAX_TRAIN_CANDIDATES = 4  # per query: the positive plus the first negatives, scored together in one list
+MAX_EVAL_RECORDS = 2_000
+MIN_SCORED_RECORDS = 50  # below this a scored dataset is labelled a small sample
+ARTIFACT_FORMAT = "org.valcorza.qwen3-reranker-0.6b.adapter.v1"
+ARTIFACT_FORMAT_VERSION = "1.0"
+ARTIFACT_WEIGHTS_NAME = "adapter.safetensors"
+ARTIFACT_MANIFEST_NAME = "manifest.json"
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def verify_snapshot(path: str | Path | None = None) -> dict[str, Any]:
@@ -224,6 +249,9 @@ class Qwen3RerankerPipeline:
 
     _runner: Callable[[list[str]], tuple[np.ndarray, list[int]]]
     device: str
+    adapter: dict[str, Any] | None = field(default=None, repr=False)
+    _model: Any = field(default=None, repr=False)
+    _tokenizer: Any = field(default=None, repr=False)
 
     @classmethod
     def from_pretrained(
@@ -244,6 +272,7 @@ class Qwen3RerankerPipeline:
         # Refuse invalid snapshots before importing model libraries.
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
+
         resolved_device = device or ("cuda:0" if torch.cuda.is_available() else "cpu")
         dtype = torch.bfloat16 if resolved_device.startswith("cuda") else torch.float32
         tokenizer = AutoTokenizer.from_pretrained(
@@ -275,7 +304,7 @@ class Qwen3RerankerPipeline:
             counts = batch["attention_mask"].sum(dim=1).tolist()
             return pair_logits.float().cpu().numpy(), [int(c) for c in counts]
 
-        return cls(runner, resolved_device)
+        return cls(runner, resolved_device, _model=model, _tokenizer=tokenizer)
 
     def _validate(self, pairs: Any, instruction: str) -> list[tuple[str, str]]:
         return _check_inputs(pairs, instruction)
@@ -305,3 +334,327 @@ class Qwen3RerankerPipeline:
             "model_id": MODEL_ID,
             "model_revision": MODEL_REVISION,
         }
+
+    # ---- adaptation -----------------------------------------------------------------------------------
+
+    def _require_model(self) -> tuple[Any, Any]:
+        if self._model is None or self._tokenizer is None:
+            raise ValueError(
+                "this operation needs a pipeline built with from_pretrained() or from_artifact()"
+            )
+        return self._model, self._tokenizer
+
+    def _score_pairs(self, pairs: Sequence[tuple[str, str]], instruction: str) -> list[float]:
+        """Score any number of pairs through the public contract, MAX_PAIRS at a time."""
+        scores: list[float] = []
+        for start in range(0, len(pairs), MAX_PAIRS):
+            scores.extend(self.rerank(list(pairs[start : start + MAX_PAIRS]), instruction)["scores"])
+        return scores
+
+    def evaluate(
+        self, records: Sequence[Mapping[str, Any]], *, instruction: str = DEFAULT_INSTRUCTION
+    ) -> dict[str, Any]:
+        """Rerank every record's candidate list (its positive followed by its negatives) with `rerank` and
+        read the rank of the positive: recall@1 / recall@3 / recall@5 and MRR, ties against the positive."""
+        from .metrics import candidate_list, rank_of_positive, ranking_metrics
+        from .samples import validate_dataset
+
+        checked = validate_dataset(records, min_records=1, max_records=MAX_EVAL_RECORDS)["records"]
+        _check_inputs([("x", "y")], instruction)
+        started = time.perf_counter()
+        pairs: list[tuple[str, str]] = []
+        sizes = []
+        for record in checked:
+            candidates = candidate_list(record)
+            sizes.append(len(candidates))
+            pairs.extend((record["query"], doc) for doc in candidates)
+        scores = self._score_pairs(pairs, instruction)
+        ranks = []
+        cursor = 0
+        for size in sizes:
+            ranks.append(rank_of_positive(scores[cursor : cursor + size], 0))
+            cursor += size
+        metrics = ranking_metrics(ranks, sizes)
+        metrics.update(
+            {
+                "instruction": instruction,
+                "n_pairs": len(pairs),
+                "verdict": "measured" if len(checked) >= MIN_SCORED_RECORDS else "measured-small-sample",
+                "adapted": self.adapter is not None,
+                "seconds": round(time.perf_counter() - started, 3),
+                "model_id": MODEL_ID,
+                "model_revision": MODEL_REVISION,
+            }
+        )
+        return metrics
+
+    @staticmethod
+    def lexical_baseline(records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+        """The no-model floor: candidate lists ordered by token overlap with the query (see metrics.py)."""
+        from .metrics import lexical_baseline
+        from .samples import validate_dataset
+
+        return lexical_baseline(
+            validate_dataset(records, min_records=1, max_records=MAX_EVAL_RECORDS)["records"]
+        )
+
+    def _trainable_names(self, trainable_layers: int) -> list[str]:
+        if not isinstance(trainable_layers, int) or not 1 <= trainable_layers <= DECODER_LAYERS:
+            raise ValueError(f"trainable_layers must be an int in 1..{DECODER_LAYERS}")
+        model, _ = self._require_model()
+        first = DECODER_LAYERS - trainable_layers
+        prefixes = tuple(f"model.layers.{k}." for k in range(first, DECODER_LAYERS))
+        return [name for name, _p in model.named_parameters() if name.startswith(prefixes)]
+
+    def adapt(
+        self,
+        train: Sequence[Mapping[str, Any]],
+        val: Sequence[Mapping[str, Any]] | None = None,
+        *,
+        instruction: str = DEFAULT_INSTRUCTION,
+        epochs: int = 2,
+        lr: float = 2e-5,
+        batch_size: int = 4,
+        trainable_layers: int = DEFAULT_TRAINABLE_LAYERS,
+        train_candidates: int = MAX_TRAIN_CANDIDATES,
+        seed: int = 0,
+        progress: Callable[[dict[str, Any]], None] | None = None,
+    ) -> dict[str, Any]:
+        """Bounded listwise fine-tuning on validated query / positive / negatives records.
+
+        Only the last `trainable_layers` decoder layers train (2 by default; the token embeddings — which the
+        output projection shares — the earlier layers and the final norm stay frozen). Each query contributes
+        one list: its positive and its first `train_candidates - 1` negatives, formatted exactly as `rerank`
+        formats them; the relevance logit of every candidate is the yes-minus-no logit at the last position,
+        and the loss is the cross-entropy of the positive over its list (listwise softmax). `batch_size`
+        counts queries per step; AdamW at a fixed learning rate, gradient clipping at 1.0, seeded shuffling,
+        no scheduler; prompts are truncated to MAX_TRAIN_TOKENS **during training only**. Epoch 0 records the
+        frozen model's validation ranking metrics; the epoch with the highest validation MRR is kept."""
+        from .metrics import candidate_list
+        from .samples import validate_dataset
+
+        if not isinstance(epochs, int) or not 1 <= epochs <= 20:
+            raise ValueError("epochs must be an int in 1..20")
+        if not (0.0 < lr <= 1e-3):
+            raise ValueError("lr must be in (0, 1e-3]")
+        if not isinstance(batch_size, int) or not 1 <= batch_size <= 16:
+            raise ValueError("batch_size must be an int in 1..16")
+        if not isinstance(train_candidates, int) or not 2 <= train_candidates <= 8:
+            raise ValueError("train_candidates must be an int in 2..8")
+        _check_inputs([("x", "y")], instruction)
+        names = self._trainable_names(trainable_layers)
+        train_checked = validate_dataset(train)["records"]
+        val_checked = (
+            validate_dataset(val, min_records=1, max_records=MAX_EVAL_RECORDS)["records"] if val else []
+        )
+        import torch
+
+        torch.manual_seed(seed)
+        model, tokenizer = self._require_model()
+        started = time.perf_counter()
+        wanted = set(names)
+        for name, param in model.named_parameters():
+            param.requires_grad_(name in wanted)
+        params = [p for p in model.parameters() if p.requires_grad]
+        n_trainable = sum(p.numel() for p in params)
+        optimiser = torch.optim.AdamW(params, lr=lr, weight_decay=0.01)
+        device = torch.device(self.device)
+        prefix_ids = tokenizer.encode(PREFIX, add_special_tokens=False)
+        suffix_ids = tokenizer.encode(SUFFIX, add_special_tokens=False)
+        body_budget = MAX_TRAIN_TOKENS - len(prefix_ids) - len(suffix_ids)
+
+        def score_val() -> dict[str, Any] | None:
+            if not val_checked:
+                return None
+            model.eval()
+            keep = ("recall@1", "recall@3", "recall@5", "mrr", "n_pairs")
+            return {k: v for k, v in self.evaluate(val_checked, instruction=instruction).items() if k in keep}
+
+        def relevance(bodies: list[str]) -> torch.Tensor:
+            enc = tokenizer(
+                bodies,
+                padding=False,
+                truncation="longest_first",
+                max_length=body_budget,
+                return_attention_mask=False,
+            )
+            enc["input_ids"] = [prefix_ids + row + suffix_ids for row in enc["input_ids"]]
+            batch = tokenizer.pad(enc, padding=True, return_tensors="pt").to(device)
+            last = model(**batch).logits[:, -1, :].float()
+            return last[:, YES_TOKEN_ID] - last[:, NO_TOKEN_ID]
+
+        history: list[dict[str, Any]] = []
+        entry: dict[str, Any] = {"epoch": 0, "train_loss": None, "val": score_val(), "note": "frozen model"}
+        history.append(entry)
+        if progress:
+            progress(entry)
+        best_mrr = entry["val"]["mrr"] if entry["val"] else -math.inf
+        best_state = {k: v.detach().clone() for k, v in model.state_dict().items() if k in wanted}
+        best_epoch = 0
+        generator = torch.Generator().manual_seed(seed)
+        lists = [candidate_list(r)[:train_candidates] for r in train_checked]
+        for epoch in range(1, epochs + 1):
+            model.train()
+            order = torch.randperm(len(train_checked), generator=generator).tolist()
+            losses = []
+            for start in range(0, len(order), batch_size):
+                chosen = order[start : start + batch_size]
+                bodies, spans = [], []
+                for i in chosen:
+                    spans.append((len(bodies), len(lists[i])))
+                    bodies.extend(
+                        format_pair(train_checked[i]["query"], doc, instruction) for doc in lists[i]
+                    )
+                logits = relevance(bodies)
+                loss = torch.stack(
+                    [
+                        torch.nn.functional.cross_entropy(
+                            logits[a : a + n][None], torch.zeros(1, dtype=torch.long, device=device)
+                        )
+                        for a, n in spans
+                    ]
+                ).mean()
+                optimiser.zero_grad(set_to_none=True)
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(params, 1.0)
+                optimiser.step()
+                losses.append(float(loss.detach()))
+            model.eval()
+            entry = {"epoch": epoch, "train_loss": sum(losses) / max(len(losses), 1), "val": score_val()}
+            history.append(entry)
+            if progress:
+                progress(entry)
+            current = entry["val"]["mrr"] if entry["val"] else math.inf
+            if current > best_mrr or not entry["val"]:
+                best_mrr = current
+                best_state = {k: v.detach().clone() for k, v in model.state_dict().items() if k in wanted}
+                best_epoch = epoch
+        merged = dict(model.state_dict())
+        merged.update(best_state)
+        model.load_state_dict(merged, strict=True)
+        model.eval()
+        for param in model.parameters():
+            param.requires_grad_(False)
+        self.adapter = {
+            "objective": "listwise cross-entropy of the positive over its candidates (yes-minus-no logit)",
+            "instruction": instruction,
+            "trainable_layers": trainable_layers,
+            "trainable_names": names,
+            "n_trainable": n_trainable,
+            "n_total": sum(p.numel() for p in model.parameters()),
+            "epochs": epochs,
+            "best_epoch": best_epoch,
+            "selection": "highest validation MRR" if val_checked else "final epoch (no validation split)",
+            "lr": lr,
+            "batch_size": batch_size,
+            "train_candidates": train_candidates,
+            "max_train_tokens": MAX_TRAIN_TOKENS,
+            "n_train": len(train_checked),
+            "n_train_pairs": sum(len(lst) for lst in lists),
+            "n_val": len(val_checked),
+            "seed": seed,
+            "history": history,
+            "seconds": round(time.perf_counter() - started, 2),
+        }
+        return dict(self.adapter)
+
+    # ---- artifacts ------------------------------------------------------------------------------------
+
+    def save_artifact(self, output_dir: str | Path, metadata: Mapping[str, Any] | None = None) -> Path:
+        """Write the adapted decoder-layer tensors as safetensors with a manifest naming the base."""
+        if self.adapter is None:
+            raise ValueError("nothing to save: call adapt() first")
+        model, _ = self._require_model()
+        from safetensors.torch import save_file
+
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        names = set(self.adapter["trainable_names"])
+        tensors = {k: v.detach().cpu().contiguous() for k, v in model.state_dict().items() if k in names}
+        weights_path = out / ARTIFACT_WEIGHTS_NAME
+        save_file(tensors, str(weights_path), metadata={"format": "pt"})
+        manifest = {
+            "format": ARTIFACT_FORMAT,
+            "format_version": ARTIFACT_FORMAT_VERSION,
+            "base_model": {
+                "id": MODEL_ID,
+                "revision": MODEL_REVISION,
+                "key": MODEL_KEY,
+                "weight_file": WEIGHT_FILE,
+                "weight_sha256": WEIGHT_SHA256,
+            },
+            "adapter": {k: v for k, v in self.adapter.items() if k not in ("history", "trainable_names")},
+            "history": self.adapter["history"],
+            "tensors": sorted(tensors),
+            "files": [
+                {
+                    "path": ARTIFACT_WEIGHTS_NAME,
+                    "bytes": weights_path.stat().st_size,
+                    "sha256": _sha256(weights_path),
+                }
+            ],
+            "metadata": dict(metadata or {}),
+        }
+        (out / ARTIFACT_MANIFEST_NAME).write_text(
+            json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        return out
+
+    def load_artifact(self, artifact_dir: str | Path) -> dict[str, Any]:
+        """Verify an adapter's manifest and digest, then overwrite exactly the tensors it carries."""
+        root = Path(artifact_dir)
+        manifest = json.loads((root / ARTIFACT_MANIFEST_NAME).read_text(encoding="utf-8"))
+        if manifest.get("format") != ARTIFACT_FORMAT:
+            raise ValueError(f"artifact format {manifest.get('format')!r} != {ARTIFACT_FORMAT!r}")
+        base = manifest.get("base_model", {})
+        if (base.get("id"), base.get("revision"), base.get("weight_sha256")) != (
+            MODEL_ID,
+            MODEL_REVISION,
+            WEIGHT_SHA256,
+        ):
+            raise ValueError("artifact was adapted from a different base model, revision or weight file")
+        entry = manifest["files"][0]
+        weights_path = root / entry["path"]
+        if not weights_path.is_file():
+            raise FileNotFoundError(f"artifact weights missing: {weights_path}")
+        if _sha256(weights_path) != entry["sha256"] or weights_path.stat().st_size != entry["bytes"]:
+            raise ValueError(f"{entry['path']}: digest or size mismatch; refusing to load")
+        model, _ = self._require_model()
+        from safetensors.torch import load_file
+
+        tensors = load_file(str(weights_path))
+        if sorted(tensors) != manifest["tensors"]:
+            raise ValueError("artifact tensor names differ from its manifest")
+        state = model.state_dict()
+        for key, value in tensors.items():
+            if key not in state or not key.startswith("model.layers."):
+                raise ValueError(
+                    f"artifact tensor {key} is not an adaptable decoder-layer tensor of the base"
+                )
+            if tuple(value.shape) != tuple(state[key].shape):
+                raise ValueError(
+                    f"artifact tensor {key}: shape {tuple(value.shape)} != {tuple(state[key].shape)}"
+                )
+        merged = dict(state)
+        merged.update({k: v.to(state[k].dtype) for k, v in tensors.items()})
+        model.load_state_dict(merged, strict=True)
+        model.eval()
+        self.adapter = {
+            **manifest["adapter"],
+            "trainable_names": manifest["tensors"],
+            "history": manifest.get("history", []),
+        }
+        return manifest
+
+    @classmethod
+    def from_artifact(
+        cls,
+        artifact_dir: str | Path,
+        *,
+        device: str | None = None,
+        weights_dir: str | Path | None = None,
+        allow_download: bool = False,
+    ) -> Qwen3RerankerPipeline:
+        pipeline = cls.from_pretrained(device=device, weights_dir=weights_dir, allow_download=allow_download)
+        pipeline.load_artifact(artifact_dir)
+        return pipeline
