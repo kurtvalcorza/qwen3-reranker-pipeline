@@ -97,7 +97,7 @@ Before changing the registry status from `Candidate` to `Release-grade`:
    - Section 4: `fetch_corpus` fetching the two pinned files (839,073 / 239,961 bytes) from `raw.githubusercontent.com`
      into `weights/banking77/`, 10,003 + 3,080 raw rows read, and the seeded balanced draw of 231 / 77 / 154 records
      over 77 intents with six candidates per query, `check_split_disjoint` reporting no shared message, and the three
-     dataset digests `__DIG_TRAIN__` / `__DIG_VAL__` / `__DIG_TEST__`; `outputs/…_train.csv` written; the four dataset
+     dataset digests `6a5c384c…` / `32cc0b97…` / `a67a92bd…`; `outputs/…_train.csv` written; the four dataset
      refusal probes each raising `ValueError`;
    - Section 5: the ceilings (`MAX_PAIRS` 32, `MAX_TEXT_TOKENS` 8192, `MAX_TEXT_CHARS` 100000, `MAX_TRAIN_TOKENS`
      192, `MAX_TRAIN_CANDIDATES` 4) and the `yes`/`no` ids surfaced; `validate_inputs` writing
@@ -136,7 +136,7 @@ A known-failing default path in the supported runtime blocks release (REL11).
 
 | Notebook | Commit / notebook blob | Date (UTC) | Executor | Outcome |
 |---|---|---|---|---|
-| `qwen3_reranker_colab.ipynb` (`E2E`) | `__LOCAL_ROW__` | 2026-09-19 | Local pre-flight harness (Windows, CPython 3.12.10, CPU, `google.colab` shim, pins pre-installed) | PASS — pre-flight only, **not** promotion evidence |
+| `qwen3_reranker_colab.ipynb` (`E2E`) | `d79994f` / `75fbc7d7` | 2026-09-19 | Local pre-flight harness (Windows, CPython 3.12.10, CPU, `google.colab` shim, pins pre-installed) | PASS — pre-flight only, **not** promotion evidence |
 | `qwen3_reranker_colab.ipynb` (`TASK-INFERENCE`, superseded) | `0c652a2` / `a21e5a860c0f` | 2026-09-14 | Kaggle T4 (`kurtvalcorza/dimer-nb2-qwen3-reranker` v2) | PASSED — 8/8 code cells, 236.4 s (1 restart after the install cell), 1,207 MB staged; evidence for the earlier inference-only notebook, not for the `E2E` blob |
 
 ## Recorded executions
@@ -148,7 +148,7 @@ general estimates.
 
 | Date (UTC) | Commit / notebook blob | Executor | Path exercised | Wall | Outcome |
 |---|---|---|---|---|---|
-| 2026-09-19 | `__LOCAL_ROW__` | Local pre-flight harness (Windows, CPython 3.12.10, CPU float32, `torch 2.14.0+cu130` with `CUDA_VISIBLE_DEVICES=-1`, `transformers 4.57.6`) | `__LOCAL_EXEC__` |
+| 2026-09-19 | `d79994f` / `75fbc7d7` | Local pre-flight harness (Windows, CPython 3.12.10, CPU float32, `torch 2.14.0+cu130` with `CUDA_VISIBLE_DEVICES=-1`, `transformers 4.57.6`) | Default sample path (install skipped, pins pre-installed → three carried modules → inline manifest assert → `stage_missing_files` fetched 0 of 13 entries because the snapshot was pre-staged → `verify_snapshot` 13 files → `from_pretrained` on CPU with the `yes`/`no` ids checked → `fetch_corpus` served from the pre-staged cache after its digest checks → 10,003 + 3,080 rows read, 231 / 77 / 154 drawn over 77 intents with six candidates per query, `check_split_disjoint` clean and digests `6a5c384c…` / `32cc0b97…` / `a67a92bd…` → four dataset refusals → input manifest with the empty-document refusal → `rerank` on the first test shortlist (gold `extra charge on statement` scored 0.9697 and ranked first; 0.85 s, 95–98 tokens per pair) with all five sanity checks `True` → three shortlists ordered → random floor → lexical baseline → frozen evaluation → `adapt` → validation + test evaluation → orderings after adaptation → adapter export → reload parity) | 925.2 s | **PASSED** — 11/11 code cells; random floor recall@1 16.7 % / MRR 0.408; lexical baseline recall@1 26.6 %, recall@3 41.6 % (below the random floor: ties count against the positive and the hard negatives share its tokens), MRR 0.457, median rank 4; frozen test recall@1 73.4 %, recall@3 94.2 %, recall@5 99.4 %, MRR 0.843, median rank 1 (924 pairs, 131.7 s); `adapt` 31,461,888 of 595,776,512 params, 231 shortlists (924 training pairs), 2 epochs, 537.0 s incl. three 462-pair validation passes, validation MRR 0.881 → 0.902 → 0.923 (recall@1 79.2 → 83.1 → 85.7 %; `best_epoch` 2, train loss 0.799 → 0.669); **adapted test recall@1 77.9 %, recall@3 96.1 %, recall@5 99.4 %, MRR 0.873 (Δ +4.5 / +1.9 / 0.0 points, +0.030 MRR)** (129.2 s); the three probe shortlists kept the gold first before and after while the order below it changed and the gold scores moved (0.9697 → 0.9365, 0.2088 → 0.4085, 0.1343 → 0.0548); per-batch report `not-measurable`; adapter 125,850,032 B / 22 tensors, SHA-256 `9026a0ab…`; reload parity exact (probe scores identical, 20-shortlist validation MRR 0.975 both ways); six exports written. Pre-flight; hosted clean-runtime run still required |
 | 2026-09-14 | `0c652a2` / `a21e5a860c0f` (`TASK-INFERENCE`, superseded) | Kaggle T4 (`kurtvalcorza/dimer-nb2-qwen3-reranker` v2) | Default sample path of the inference-only notebook: one synthetic query with three candidates, `stage_missing_files` fetching `model.safetensors` from the Hub, `verify_snapshot` over 13 files, `rerank` with its sanity checks, `not-measurable` report, CSV + JSON exports | 236.4 s | **PASSED** — 8/8 code cells (1 restart after the install cell), 1,207 MB staged; history only |
 
 ## Current status
