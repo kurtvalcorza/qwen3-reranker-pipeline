@@ -8,11 +8,11 @@ import hashlib
 import json
 
 import pytest
-import torch
 
 from qwen3_reranker_pipeline import DEFAULT_WEIGHTS_DIR, TASK_INSTRUCTION, WEIGHT_FILE, Qwen3RerankerPipeline
 
 pytest.importorskip("transformers")
+torch = pytest.importorskip("torch")
 if not (DEFAULT_WEIGHTS_DIR / WEIGHT_FILE).is_file():
     pytest.skip("snapshot not staged", allow_module_level=True)
 
