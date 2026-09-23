@@ -108,7 +108,7 @@ This pipeline is not intended for decisions in health, safety, criminal justice,
 
 ###### Use cases
 
-The pipeline must not be used to rank people against a prototype for employment, housing, credit, insurance, education, or healthcare access, to profile individuals from their queries or documents, for surveillance or social scoring, or for unlawful discrimination in any setting. It must not be used to rank content for manipulation or deception, to score text obtained without authorisation, or in any way that breaches the Apache-2.0 terms of the upstream weights or the DIMER deployment terms. These prohibitions hold even where the model would produce a plausible ordering.
+The pipeline must not be used to rank people against a prototype for employment, housing, credit, insurance, education, or healthcare access, to profile individuals from their queries or documents, for surveillance or social scoring, or for unlawful discrimination in any setting. It must not be used to rank content for manipulation or deception, to score text obtained without authorisation, or in any way that breaches the Apache-2.0 terms of the upstream weights or the terms of the deployment that runs the pipeline. These prohibitions hold even where the model would produce a plausible ordering.
 
 ## Immutable provenance
 
