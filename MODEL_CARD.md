@@ -42,7 +42,7 @@ The task is query-document relevance scoring: input is a list of up to `MAX_PAIR
 
 ###### Primary Intended Users
 
-Intended users are machine-learning engineers, search engineers, and application developers integrating reranking into research prototypes, internal enterprise search, or the DIMER model workbench. The pipeline assumes its users understand that the score is a relative relevance signal and not a calibrated probability, that scores are comparable within one query's candidate list but not across queries or instructions, that cost grows linearly with the number of pairs and with prompt length up to 8,192 tokens, that the instruction text changes the scores, and that ranking quality on their own corpus must be measured with their own relevance judgements before deployment.
+Intended users are machine-learning engineers, search engineers, and application developers integrating reranking into research prototypes or in-house search. The pipeline assumes its users understand that the score is a relative relevance signal and not a calibrated probability, that scores are comparable within one query's candidate list but not across queries or instructions, that cost grows linearly with the number of pairs and with prompt length up to 8,192 tokens, that the instruction text changes the scores, and that ranking quality on their own corpus must be measured with their own relevance judgements before deployment.
 
 ###### Out-of-scope use cases
 
