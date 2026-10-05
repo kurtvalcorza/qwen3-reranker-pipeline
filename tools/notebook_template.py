@@ -20,8 +20,23 @@ TEMPLATE = {
     "notebook_name": "qwen3_reranker_colab.ipynb",
     "profile": "E2E",
     "mode": "GUIDED",
+    # SWP-R (2026-10-05 fleet sweep): nothing is pip-installed into the notebook kernel. The fleet's uv isolated-environment
+    # mechanism (build_notebook.py/2.2): managed CPython, a size- and SHA-256-verified uv wheel, and a lock compiled from the
+    # pyproject pins with `uv pip compile pyproject.toml --python-version 3.12 --python-platform x86_64-manylinux_2_28
+    # --generate-hashes --only-binary :all: -o tutorials/requirements-colab.lock.txt` (uv 0.12.15).
+    "isolated_runtime": True,
+    "infrastructure_labels": True,
+    "managed_python": "3.12.12",
+    "uv": {
+        "version": "0.12.15",
+        "url": "https://files.pythonhosted.org/packages/1e/fd/432451d732917c49152a291de3ef171aa6b0f1a22d39780fb2c1f085ca4c/uv-0.12.15-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+        "bytes": 20081404,
+        "sha256": "aee9802f46bae436bd91751bb33ddeb379ef1596b5c19df193219d545d244b60",
+    },
+    "lock": "tutorials/requirements-colab.lock.txt",
     "run_all": (
-        "Selecting **Run all** in a fresh supported runtime installs the pinned dependencies, stages and digest-verifies the "
+        "Selecting **Run all** in a fresh supported runtime builds an isolated environment from the hash-locked pins (nothing is "
+        "installed into the notebook's own Python, so no restart is needed and Run all completes in one pass), stages and digest-verifies the "
         "pinned Qwen3-Reranker-0.6B snapshot (safetensors, 1.19 GB), fetches the two digest-pinned Banking77 CSV files from "
         "the project repository (1.1 MB, no credential), pairs every customer message with its intent phrase and a seeded "
         "shortlist of five other intent phrases and draws 231 / 77 / 154 training, validation and test records balanced "
@@ -38,14 +53,41 @@ TEMPLATE = {
     ),
     "byod": (
         "After the tutorial workflow completes, set `USE_BYOD = True` in Section 4 and re-run from that cell to supply your own "
-        "records as a CSV (columns `id`, `query`, `positive`, `negatives` with the negatives separated by ` | `), a JSON "
-        "array or a JSONL file of `{{id, query, positive, negatives}}` records; set `INSTRUCTION` to a one-line description "
+        "records — as `BYOD_PATH` (a path in the runtime, which works on Colab, Kaggle and Jupyter) or, when it is empty, through the "
+        "Colab upload dialog — as a CSV (columns `id`, `query`, `positive`, `negatives` with the negatives separated by ` | `), a JSON "
+        "array or a JSONL file of `{id, query, positive, negatives}` records; set `INSTRUCTION` to a one-line description "
         "of your relevance judgement. They pass through the same validation, seeded query-disjoint split, floor and "
         "baseline, frozen scoring, fine-tuning, held-out evaluation, reranking, artifact export and reload-parity cells as "
         "the Banking77 sample. The expected schema and the ceilings are stated in the Prerequisites and in Section 4, and "
         "uploaded files stay inside this runtime. BYOD is optional and never part of the default path."
     ),
     "pipeline_class": "Qwen3RerankerPipeline",
+    "guided": {
+        "opening": [
+            '**Who this notebook is for.** The intended audience is a learner who knows basic Python, has used Colab or Jupyter, and wants to see how a '
+            'cross-encoder reranker orders a shortlist of candidate documents for a query, how ranking quality is measured against honest floors (including a '
+            'lexical baseline the hard negatives were chosen to defeat), and what a bounded listwise fine-tuning changes. No prior experience with Qwen3, rerankers '
+            'or ranking losses is assumed; terms are explained where they first matter and again in the **Glossary** at the end. CPU works but is slow (about '
+            'fifteen minutes of model time, because a cross-encoder runs one forward pass per pair); a GPU runtime is much faster.\n\n**Input → Model → Output.**\n\n| '
+            '| Reranking | Bounded listwise fine-tuning |\n|---|---|---|\n| Input | (query, document) pairs with a one-line relevance instruction | Banking77 '
+            'messages, each with its intent phrase and five shortlisted negatives (231 / 77 / 154, query-disjoint) |\n| Model | the Qwen3-Reranker-0.6B decoder, '
+            'reading the `yes` / `no` logits at the last position | the same model; only the last two decoder layers train (31.5 M of 595.8 M parameters) with a '
+            'listwise cross-entropy |\n| Output | one relevance score per pair (the `yes` share — not a calibrated probability) and a ranking | recall@1/3/5 and MRR '
+            'beside a random floor, a lexical baseline and the frozen model, and a 126 MB safetensors adapter that reloads with parity |\n\n**How to use this '
+            'notebook.** Choose a runtime (**Runtime → Change runtime type → T4 GPU** is strongly recommended), then **Runtime → Run all**. Run all completes in '
+            "one pass: Section 1 installs nothing into the notebook's own Python, so no restart is needed. Sections 1–3 are **infrastructure** — the isolated "
+            'environment, the carried package and the model snapshot — and their cells are collapsed; you may run them without studying them. The learning path '
+            'starts in Section 4. Form fields (`# @param`) are the only values meant to be edited, and the defaults reproduce the recorded run. Before each '
+            'principal result the notebook asks you to **Predict**; after it come **What to notice** and a collapsible **Check your reasoning** with a worked '
+            "answer from the recorded run (the Kaggle Tesla T4 run of 19 September 2026 recorded in `docs/release-verification.md`, bfloat16 on CUDA; the prose's "
+            'build-record numbers are the float32 CPU run, so the two differ in the last digits). Every adaptation starts from the pinned base, so re-running '
+            'Section 7 with other settings is a fresh experiment. **Troubleshooting**, a **Glossary** and a **Conclusion** template are at the end. Writing your '
+            'predictions down is optional.\n\n**Roadmap:** 1–3 infrastructure → 4 the Banking77 corpus, shortlists, validation and the split *(evaluation practice)* '
+            '→ 5 the reranking contract *(core concept: relevance scores, not probabilities)* → 6 the random floor, the lexical baseline and the frozen model '
+            '*(evaluation practice)* → 7 bounded listwise fine-tuning *(core concept)* → 8 held-out evaluation *(evaluation practice)* → 9 reranking before and '
+            'after, export and fresh reload *(engineering)* → interpretation, troubleshooting, glossary and your conclusion.'
+        ],
+    },
     "weights_key": "qwen3-reranker-0.6b",
     "modules": ["pipeline.py", "metrics.py", "samples.py"],
     "entry_module": "pipeline.py",
@@ -116,9 +158,9 @@ TEMPLATE = {
         "Banking77 intent shortlist stands in for your reranking task. The repository exposes none of these."
     ),
     "prerequisites": [
-        "- **Runtime:** a fresh supported runtime (Google Colab or Jupyter, Python 3.12). The default path runs on CPU and uses CUDA automatically when available. **Precision differs by device:** the pipeline runs float32 on CPU and bfloat16 on CUDA, so scores and the recorded metrics can differ between the two. CPU is adequate but not fast for a cross-encoder: the build record measured about 5 s to load and digest-verify the 1.19 GB snapshot, about 132 s to score the 154 test shortlists (924 pairs) and about 170 s per training epoch over 231 shortlists plus a validation pass per epoch. The pinned `torch==2.14.0` install and the 1.19 GB checkpoint are the large downloads of the run.",
+        "- **Runtime:** a fresh supported runtime (Google Colab or Jupyter, Python 3.12). The default path runs on CPU and uses CUDA automatically when available. **Precision differs by device:** the pipeline runs float32 on CPU and bfloat16 on CUDA, so scores and the recorded metrics can differ between the two. CPU is adequate but not fast for a cross-encoder: the build record measured about 5 s to load and digest-verify the 1.19 GB snapshot, about 132 s to score the 154 test shortlists (924 pairs) and about 170 s per training epoch over 231 shortlists plus a validation pass per epoch. Building the isolated environment (the pinned `torch==2.14.0` among its packages; reused on a re-run) and the 1.19 GB checkpoint are the large downloads of the run.",
         "- **Knowledge:** basic Python; what a cross-encoder does and why it scores one pair per forward pass; what recall@k and mean reciprocal rank measure over a candidate list; what a listwise softmax loss does.",
-        "- **Data contract:** records are `{{id, query, positive, negatives}}` — a query of 1..100,000 characters, a positive document of 1..1,000 characters and 1..15 distinct negative documents (the pair prompt is truncated longest-first to 8,192 tokens at inference and to 192 tokens **during training only**), ids matching `[A-Za-z0-9_.:-]{{1,64}}` and unique; a dataset needs 8..20,000 records; queries are de-duplicated case-insensitively before splitting so the same message never sits in two splits. BYOD accepts CSV (negatives separated by ` | `), JSON or JSONL in that shape.",
+        "- **Data contract:** records are `{id, query, positive, negatives}` — a query of 1..100,000 characters, a positive document of 1..1,000 characters and 1..15 distinct negative documents (the pair prompt is truncated longest-first to 8,192 tokens at inference and to 192 tokens **during training only**), ids matching `[A-Za-z0-9_.:-]{1,64}` and unique; a dataset needs 8..20,000 records; queries are de-duplicated case-insensitively before splitting so the same message never sits in two splits. BYOD accepts CSV (negatives separated by ` | `), JSON or JSONL in that shape.",
         "- **Validation is structural, not semantic:** nothing checks that a positive is relevant to its query, that the negatives are not, or that the instruction describes the judgement — a mislabelled record set is fine-tuned on without complaint.",
         "- **Privacy:** Do not upload confidential or restricted data to a hosted runtime unless you are authorized to process it there — an internal query log with its relevance labels is exactly that. The default path uploads nothing.",
         "- **External access (data):** besides the Hub, the default path fetches two pinned objects (`train.csv` 839,073 bytes, `test.csv` 239,961 bytes; SHA-256 `b06e26ac…` / `d12d6e3b…`) from `raw.githubusercontent.com` at the pinned `PolyAI-LDN/task-specific-datasets` commit over HTTPS, each refused on any mismatch before it is read; Banking77 is CC BY 4.0 (Casanueva et al., 2020).",
@@ -141,7 +183,9 @@ TEMPLATE = {
                 "the judgement every pair carries in later cells.\n\n"
                 "Look for: 10,003 + 3,080 raw rows, two digests, splits 231 / 77 / 154, six candidates per query, and "
                 "four refusal probes — a duplicate id, an empty query, a negative equal to the positive and a dataset too "
-                "small to split — each rejected before `torch` does anything."
+                "small to split — each rejected before `torch` does anything.\n\n"
+                "*Evaluation practice.* **Predict before running:** three of the five negatives are the phrases with the most words in "
+                "common with the message. Who does that make life hard for — the lexical baseline or the reranker?"
             ),
             "code": (
                 "import hashlib\n"
@@ -149,15 +193,31 @@ TEMPLATE = {
                 "import json\n\n"
                 "USE_BYOD = False  # @param {{type:\"boolean\"}}\n"
                 "SPLIT_SEED = 42  # @param {{type:\"integer\"}}\n"
-                "INSTRUCTION = 'Given a customer support message, judge whether the document names the banking intent it expresses'  # @param {{type:\"string\"}}\n\n"
+                "INSTRUCTION = 'Given a customer support message, judge whether the document names the banking intent it expresses'  # @param {{type:\"string\"}}\n"
+                "# A file already in the runtime (works on Colab, Kaggle and Jupyter); empty = the Colab upload dialog.\n"
+                "BYOD_PATH = ''  # @param {{type:\"string\"}}\n"
+                "\n"
                 "os.makedirs('outputs', exist_ok=True)\n"
                 "if USE_BYOD:\n"
-                "    from google.colab import files\n"
-                "    uploaded = files.upload()\n"
-                "    file_name, payload = next(iter(uploaded.items()))\n"
-                "    byod_path = Path('work') / file_name\n"
-                "    byod_path.parent.mkdir(parents=True, exist_ok=True)\n"
-                "    byod_path.write_bytes(payload)\n"
+                "    if BYOD_PATH.strip():\n"
+                "        byod_path = Path(BYOD_PATH.strip()).expanduser()\n"
+                "        if not byod_path.is_file():\n"
+                "            raise FileNotFoundError(f'BYOD_PATH {{BYOD_PATH!r}} is not a file (relative paths start at {{Path.cwd()}}): give one .csv, .json, .jsonl file holding id, query, positive and negatives.')\n"
+                "        file_name = byod_path.name\n"
+                "    else:\n"
+                "        try:\n"
+                "            from google.colab import files\n"
+                "        except ImportError:\n"
+                "            raise RuntimeError('USE_BYOD is True but BYOD_PATH is empty, and the upload dialog exists only in Google Colab: on Kaggle or Jupyter put the file in the runtime and set BYOD_PATH to its path.') from None\n"
+                "        uploaded = files.upload() or {{}}\n"
+                "        if len(uploaded) != 1:\n"
+                "            raise ValueError(f'Upload exactly one file (received {{len(uploaded)}}; a cancelled dialog sends none): run this cell again.')\n"
+                "        file_name, payload = next(iter(uploaded.items()))\n"
+                "        if not file_name.lower().endswith(('.csv', '.json', '.jsonl')):\n"
+                "            raise ValueError(f'{{file_name}}: upload one .csv, .json, .jsonl file holding id, query, positive and negatives.')\n"
+                "        byod_path = Path('work') / file_name\n"
+                "        byod_path.parent.mkdir(parents=True, exist_ok=True)\n"
+                "        byod_path.write_bytes(payload)\n"
                 "    records = load_byod_dataset(byod_path)\n"
                 "    splits = split_dataset(records, seed=SPLIT_SEED)\n"
                 "    data_source = 'BYOD (' + file_name + ')'\n"
@@ -191,6 +251,14 @@ TEMPLATE = {
         },
         {
             "md": (
+                '**What to notice:** 10,003 + 3,080 raw rows, splits 231 / 77 / 154, six candidates per query, and the four refusals.\n\n<details><summary>Check your '
+                'reasoning</summary>Mostly the lexical baseline: word-overlap negatives are exactly what a word counter confuses with the answer, so the floor is '
+                'deliberately hard to beat by words alone, and a reranker has to judge meaning. The shortlist is seeded per record id, so it reproduces; the splits are '
+                'query-disjoint. The refusals (duplicate id, empty query, a negative equal to the positive, too small) stop before `torch` runs.</details>'
+            ),
+        },
+        {
+            "md": (
                 "## 5. Rerank one shortlist through the inference contract\n\n"
                 "Before any adaptation, the reranking contract is exercised as it always was, on the first test record's "
                 "shortlist. `validate_inputs` applies exactly the checks `rerank` applies — both route through the same "
@@ -200,7 +268,8 @@ TEMPLATE = {
                 "`score` per pair (the `yes` share of a two-way softmax — a **relevance score, not a calibrated "
                 "probability**), the `ranking` as a permutation of the pairs, `n_tokens` and `truncated` flags. The "
                 "ranked shortlist is printed with the gold intent marked; the frozen rankings of three test shortlists are "
-                "kept as the *before* column for Section 9."
+                "kept as the *before* column for Section 9.\n\n"
+                "**Predict before running:** will the six scores of one shortlist add up to 1?"
             ),
             "code": (
                 "import time\n\n"
@@ -242,6 +311,13 @@ TEMPLATE = {
         },
         {
             "md": (
+                '**What to notice:** one score per pair in [0, 1], `ranking` as a permutation, `checks`, the empty-document finding, and where the gold intent (`*`) lands.\n\n<details><summary>Check '
+                'your reasoning</summary>No. Each score is the `yes` share of a two-way softmax for that pair alone, so the six are independent and need not sum to '
+                'anything; only their order matters. A score of 0.9 is a relevance score, not a 90 % probability, and no threshold ships.</details>'
+            ),
+        },
+        {
+            "md": (
                 "## 6. The random floor, the lexical baseline and the frozen model on the test split\n\n"
                 "Three numbers frame the adaptation, all over the same 154 six-entry shortlists. The **random floor** is "
                 "what a uniformly random ordering achieves in expectation (recall@1 = 1 / 6, MRR ≈ 0.41). The **lexical "
@@ -251,7 +327,10 @@ TEMPLATE = {
                 "shortlist by the relevance score and reads the rank of the positive; ties are counted against it. Look "
                 "for the frozen reranker well above both — the build record saw recall@1 around 73.4 % and MRR "
                 "around 0.843 — and read `median_rank` beside the means. About 132 s on CPU: 924 forward "
-                "passes."
+                "passes. Whether the frozen model beats the random floor is recorded as a **verdict**, not asserted, so a run on your "
+                "own shortlists continues either way.\n\n"
+                "*Evaluation practice.* **Predict before running:** on these hard-negative shortlists, will the lexical baseline even beat "
+                "the random floor on recall@1?"
             ),
             "code": (
                 "def brief(m):\n"
@@ -265,7 +344,20 @@ TEMPLATE = {
                 "frozen_test = pipe.evaluate(test_records, instruction=INSTRUCTION)\n"
                 "print({{'frozen_model_test': brief(frozen_test), 'n_queries': frozen_test['n_queries'], 'n_pairs': frozen_test['n_pairs'], 'verdict': frozen_test['verdict'], 'adapted': frozen_test['adapted'], 'seconds': round(time.perf_counter() - t0, 1)}})\n"
                 "print({{'definitions': frozen_test['definitions']}})\n"
-                "assert frozen_test['n_queries'] == baseline_lexical['n_queries'] and frozen_test['mrr'] > floor['mrr']"
+                "# Contract integrity: both systems ranked the same shortlists.\n"
+                "if frozen_test['n_queries'] != baseline_lexical['n_queries']:\n"
+                "    raise RuntimeError(f\"contract: the frozen model ranked {{frozen_test['n_queries']}} shortlists, the lexical baseline {{baseline_lexical['n_queries']}}\")\n"
+                "# SWP-A: the quality comparison is a recorded verdict, not an assert, so a BYOD run still reaches adaptation and export.\n"
+                "frozen_vs_floor = 'above' if frozen_test['mrr'] > floor['mrr'] else 'not above'\n"
+                "print({{'verdict_frozen_vs_random_floor_mrr': frozen_vs_floor}})"
+            ),
+        },
+        {
+            "md": (
+                '**What to notice:** the three systems on recall@1/3/5 and MRR, `median_rank`, and the verdict line.\n\n<details><summary>Check your '
+                'reasoning</summary>Barely on recall@1, and not on recall@3. In the recorded run recall@1 was 0.1667 for the random floor, 0.2662 for the lexical '
+                'baseline and 0.7338 for the frozen reranker; at recall@3 the lexical baseline (0.4156) fell *below* the random floor (0.5), because the overlap '
+                'negatives crowd its top three. MRR: 0.4083 / 0.457 / 0.8429. The frozen model judges meaning, not words.</details>'
             ),
         },
         {
@@ -281,7 +373,11 @@ TEMPLATE = {
                 "`MAX_TRAIN_TOKENS` (192) **during training only**. Epoch 0 records the frozen model's validation ranking "
                 "metrics; every epoch is scored the same way, and the epoch with the highest validation MRR is kept.\n\n"
                 "Watch validation recall@1 climb over two epochs (about 170 s of training plus a validation pass per "
-                "epoch on CPU). The build record's sweep on this sample: two layers at 2e-5 reached recall@1 77.9 % (validation MRR still rising at epoch 2); two layers at 5e-5 peaked at epoch 1 and ended at 76.0 % — the default keeps 2e-5."
+                "epoch on CPU). The build record's sweep on this sample: two layers at 2e-5 reached recall@1 77.9 % (validation MRR still rising at epoch 2); two layers at 5e-5 peaked at epoch 1 and ended at 76.0 % — the default keeps 2e-5. "
+                "Every call starts from the pinned base (`started_from` in the printed result), so a re-run with other settings is a "
+                "fresh experiment, not continued training, and epoch 0 is always the frozen model.\n\n"
+                "**Predict before running:** the frozen reranker already ranks about three in four shortlists correctly. How much room "
+                "is left for two epochs on 231 shortlists?"
             ),
             "code": (
                 "EPOCHS = 2  # @param {{type:\"integer\"}}\n"
@@ -301,7 +397,14 @@ TEMPLATE = {
                 "t0 = time.perf_counter()\n"
                 "adapt_result = pipe.adapt(train_records, val_records, instruction=INSTRUCTION, epochs=EPOCHS, lr=LEARNING_RATE, batch_size=BATCH_SIZE, trainable_layers=TRAINABLE_LAYERS, train_candidates=TRAIN_CANDIDATES, progress=report)\n"
                 "adapt_seconds = round(time.perf_counter() - t0, 1)\n"
-                "print({{'objective': adapt_result['objective'], 'trainable_parameters': adapt_result['n_trainable'], 'total_parameters': adapt_result['n_total'], 'train_pairs': adapt_result['n_train_pairs'], 'best_epoch': adapt_result['best_epoch'], 'selection': adapt_result['selection'], 'seconds': adapt_seconds}})"
+                "print({{'objective': adapt_result['objective'], 'trainable_parameters': adapt_result['n_trainable'], 'total_parameters': adapt_result['n_total'], 'train_pairs': adapt_result['n_train_pairs'], 'best_epoch': adapt_result['best_epoch'], 'selection': adapt_result['selection'], 'started_from': adapt_result['started_from'], 'seconds': adapt_seconds}})"
+            ),
+        },
+        {
+            "md": (
+                '**What to notice:** epoch 0 (`note: frozen model`), the training loss, `val_recall@1` and `val_mrr` per epoch, `best_epoch`, and `started_from`.\n\n<details><summary>Check '
+                "your reasoning</summary>Not much: the gains are a few points. The build record's sweep found 2e-5 still rising at epoch 2 while 5e-5 peaked at epoch 1 "
+                'and fell back — a higher learning rate overshoots a model that is already good. Validation MRR, not training loss, picks the kept epoch.</details>'
             ),
         },
         {
@@ -310,10 +413,13 @@ TEMPLATE = {
                 "The test split was never used for training or epoch selection, and no message in it appears in the "
                 "training or validation splits. The adapted reranker is scored exactly as the frozen one was in Section 6 "
                 "— same shortlists, same instruction — and the four rows are put side by side. Look for recall@1 up by "
-                "several points and MRR up accordingly; the cell asserts the adapted MRR is above the frozen MRR. 154 "
+                "several points and MRR up accordingly; the cell records whether the adapted MRR is above the frozen MRR as a "
+                "**verdict** (`improved`, `no change` or `worse`) in the report and `result.json` instead of asserting it, so a run on "
+                "your own shortlists that does not improve still exports and reloads. 154 "
                 "shortlists from one seeded split of one corpus give no dispersion estimate; the deltas are sample-sanity "
                 "evidence that the adaptation contract works, not a benchmark, and a gain on Banking77 intent shortlists "
-                "says nothing about your reranking task until you measure it there. Another 132 s on CPU."
+                "says nothing about your reranking task until you measure it there. Another 132 s on CPU.\n\n"
+                "*Evaluation practice.* **Predict before running:** recall@5 on a six-entry shortlist — can it move at all?"
             ),
             "code": (
                 "adapted_test = pipe.evaluate(test_records, instruction=INSTRUCTION)\n"
@@ -324,6 +430,9 @@ TEMPLATE = {
                 "}}\n"
                 "comparison['median_rank'] = {{'lexical': baseline_lexical['median_rank'], 'frozen': frozen_test['median_rank'], 'adapted': adapted_test['median_rank']}}\n"
                 "comparison['delta_vs_frozen'] = {{metric: round(adapted_test[metric] - frozen_test[metric], 4) for metric in ('recall@1', 'recall@3', 'recall@5', 'mrr')}}\n"
+                "delta_mrr = adapted_test['mrr'] - frozen_test['mrr']\n"
+                "# SWP-A: the direction is a recorded verdict, not an assert, so a BYOD run always reaches export, reload and result.json.\n"
+                "comparison['verdict'] = {{'adapted_vs_frozen_mrr': 'improved' if delta_mrr > 0 else ('no change' if delta_mrr == 0 else 'worse'), 'frozen_vs_random_floor_mrr': frozen_vs_floor}}\n"
                 "for metric, row in comparison.items():\n"
                 "    print({{metric: row}})\n"
                 "evaluation_report_payload = {{\n"
@@ -338,14 +447,22 @@ TEMPLATE = {
                 "    'validation_metrics': adapted_val,\n"
                 "    'test_metrics': adapted_test,\n"
                 "    'comparison': comparison,\n"
+                "    'verdict': comparison['verdict'],\n"
                 "    'adaptation': {{k: v for k, v in adapt_result.items() if k not in ('history', 'trainable_names')}},\n"
                 "    'history': adapt_result['history'],\n"
                 "    'adaptation_seconds': adapt_seconds,\n"
                 "}}\n"
                 "with open('outputs/{stem}_evaluation_report.json', 'w', encoding='utf-8') as f:\n"
                 "    json.dump(evaluation_report_payload, f, indent=2, ensure_ascii=False)\n"
-                "assert adapted_test['mrr'] > frozen_test['mrr']\n"
                 "print({{'report': 'outputs/{stem}_evaluation_report.json'}})"
+            ),
+        },
+        {
+            "md": (
+                '**What to notice:** the four rows side by side, `delta_vs_frozen`, and the `verdict`.\n\n<details><summary>Check your reasoning</summary>Hardly: with '
+                'the positive almost always in the top five already, recall@5 has nowhere to go. In the recorded run recall@5 stayed 0.9935, recall@1 rose 0.7338 → '
+                '0.7662 and MRR 0.8429 → 0.8634 (verdict *improved*). A three-point gain on 154 shortlists from one seed is sample-sanity evidence, not a measured '
+                'improvement.</details>'
             ),
         },
         {
@@ -407,6 +524,7 @@ TEMPLATE = {
                 "    'corpus': {{'name': CORPUS_NAME, 'release': CORPUS_RELEASE, 'base_url': CORPUS_BASE_URL, 'files': {{k: {{'name': v[0], 'bytes': v[1], 'sha256': v[2]}} for k, v in CORPUS_FILES.items()}}, 'license': CORPUS_LICENSE}},\n"
                 "    'inference_contract': {{'input_manifest': input_manifest, 'sanity_checks': checks, 'query': record['query'], 'candidates': candidates, 'scores': scores, 'ranking': result['ranking'], 'n_tokens': result['n_tokens'], 'seconds': rerank_seconds}},\n"
                 "    'comparison': comparison,\n"
+                "    'verdict': comparison['verdict'],\n"
                 "    'reranking_before_after': rows,\n"
                 "    'batch_report': single_report,\n"
                 "    'artifact': {{'dir': str(artifact_dir), 'sha256': artifact_manifest['files'][0]['sha256'], 'bytes': artifact_manifest['files'][0]['bytes'], 'tensors': len(artifact_manifest['tensors'])}},\n"
@@ -416,6 +534,14 @@ TEMPLATE = {
                 "with open('outputs/{stem}_result.json', 'w', encoding='utf-8') as handle:\n"
                 "    json.dump(result_payload, handle, indent=2, ensure_ascii=False)\n"
                 "print(sorted(os.listdir('outputs')))"
+            ),
+        },
+        {
+            "md": (
+                "**What to notice:** the gold intent's rank before and after for the three shortlists, the artifact's size, and `reload_parity`.\n\n<details><summary>Check "
+                'your reasoning</summary>Scores from the adapted model are on a different scale from the frozen ones — the `yes` share moves for every pair — so '
+                'compare ranks, not scores. In the recorded run the reloaded adapter gave identical scores and the same validation MRR on the 20-query parity subset '
+                '(0.9125 in memory and reloaded).</details>'
             ),
         },
     ],
@@ -453,6 +579,34 @@ TEMPLATE = {
         "whether validation MRR keeps rising or turns (the best epoch is kept either way); change `INSTRUCTION` and re-read "
         "the frozen numbers — the judgement is instruction-conditioned; or bring your own shortlists through BYOD and read "
         "the lexical baseline before the adapted number.\n\n"
+        '## Troubleshooting\n\n- **Section 1 stops with "This notebook needs a Linux x86_64 runtime"** — you are on Windows, macOS or an ARM machine. Use Google '
+        'Colab, Kaggle or a Linux x86_64 Jupyter server.\n- **The uv wheel fails its size/SHA-256 check, or a download in Section 1 times out** — run Section 1 '
+        'again; a complete environment built from the same lock is reused, an incomplete one is finished. If it repeats, the network is blocking or altering '
+        '`files.pythonhosted.org` or `pypi.org`.\n- **"The isolated environment\'s Python process exited"** — usually out of memory. Restart the session and '
+        'choose **Run all**.\n- **You re-ran Section 1 on its own** — nothing is lost: it keeps the running worker and every variable, so the cells after it '
+        'keep working. After a session restart, run from the top.\n- **Section 3 reports a size or SHA-256 mismatch, or cannot reach the Hub** — the message '
+        'names the file. Delete it from the snapshot folder Section 3 prints and run Section 3 again.\n- **Section 4 reports a size or SHA-256 mismatch for a '
+        'Banking77 file** — the download from `raw.githubusercontent.com` was cut short or altered. Run Section 4 again; a verified cached file is reused.\n- '
+        '**Sections 6–8 are very slow** — a cross-encoder runs one forward pass per query–candidate pair (924 for the test split); on CPU that is minutes per '
+        'evaluation. Switch to a T4 GPU.\n- **Your numbers differ slightly from the recorded run** — CUDA runs bfloat16 and CPU float32; the comparison between '
+        'systems, not the last digit, is the result.\n- **BYOD: a column or record refusal** — the message names the rule: columns `id`, `query`, `positive`, '
+        '`negatives` (separated by ` | `), 1..15 distinct negatives per record, at least eight records; set `INSTRUCTION` to describe your relevance judgement.\n- '
+        '**BYOD: "BYOD_PATH … is not a file"** — the path is relative to the working directory printed in the message; give one .csv, .json or .jsonl file.\n- '
+        '**BYOD: "the upload dialog exists only in Google Colab"** — on Kaggle or Jupyter, put the file in the runtime and set `BYOD_PATH` to its path.\n- '
+        '**BYOD: "Upload exactly one file"** — the dialog was cancelled or several files were chosen; run the cell again.\n\n## Glossary\n\n- **Reranker / '
+        'cross-encoder:** a model that reads the query and one candidate together and scores their relevance; accurate, but one forward pass per pair.\n- '
+        '**Shortlist:** the small candidate list a first-stage retriever would hand the reranker; here the positive plus five negatives.\n- **Hard negatives:** '
+        "wrong candidates chosen to look right (here, the highest word overlap with the message).\n- **Relevance score:** the `yes` share of the model's yes/no "
+        'answer for one pair; it orders candidates and is not a calibrated probability.\n- **Instruction:** the one-line relevance judgement every pair carries; '
+        'the model is instruction-conditioned.\n- **Recall@k / MRR:** the share of queries whose positive is in the top k; the mean of 1 / rank of the positive.\n- '
+        "**Random floor / lexical baseline:** a random ordering's expected score; ordering by shared-word (Jaccard) overlap.\n- **Listwise loss:** the "
+        'cross-entropy of the positive over its whole candidate list, rather than one pair at a time.\n- **Frozen / adapted / pinned base:** the packaged model; '
+        'the model after Section 7; the verified packaged weights every adaptation starts from (`restore_base`).\n- **Isolated environment:** the separate '
+        'Python environment Section 1 builds from the hash lock; every later cell runs there.\n\n## Conclusion (your notes)\n\nComplete these in your own words; '
+        "the recorded run's values are in the **Check your reasoning** answers above.\n\n- On the 154 test shortlists the frozen reranker reached recall@1 ___ "
+        "against the lexical baseline's ___ and the random floor's ___.\n- Listwise fine-tuning moved recall@1 to ___ and MRR to ___ (verdict: ___), which I "
+        'read as ___.\n- The number I would not trust on its own is ___, because ___.\n- Before adapting on my own shortlists I would draw negatives from ___, '
+        'de-duplicate by ___, and compare against ___.\n\n'
         "## References\n\n"
         "- Repository README: https://github.com/kurtvalcorza/qwen3-reranker-pipeline/blob/main/README.md\n"
         "- Repository model card: https://github.com/kurtvalcorza/qwen3-reranker-pipeline/blob/main/MODEL_CARD.md\n"
