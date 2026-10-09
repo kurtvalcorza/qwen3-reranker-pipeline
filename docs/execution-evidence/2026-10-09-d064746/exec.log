@@ -1,0 +1,65 @@
+[colab] Parsing notebook '/home/kurt/colab-runs/qwen3-reranker-pipeline-d064746-745fb0/qwen3_reranker_colab_d064746_colab-cli-t4.ipynb'...
+[colab] Executing cell 1/12 - Infrastructure: build (or reuse) the isolated environment and route later cells to it...
+{'isolated_environment': '/content/dimer_isolated_env_bfda1e43e3a3', 'reused': False, 'isolated_python': '3.12.12', 'kernel_python': '3.13.15', 'locked_packages': 47, 'setup_seconds': 75}
+{'routed_to': '/content/dimer_isolated_env_bfda1e43e3a3/bin/python', 'worker_pid': 3677, 'worker_reused': False}
+[colab] Executing cell 2/12 - Infrastructure: record the runtime...
+{'notebook_source': {'repository': 'qwen3-reranker-pipeline', 'repository_revision': 'c628da8c7a9c6f3fedc3e30f4bd426628fa30a9c', 'embedded_module': 'src/qwen3_reranker_pipeline/pipeline.py', 'embedded_modules': ['src/qwen3_reranker_pipeline/metrics.py', 'src/qwen3_reranker_pipeline/pipeline.py', 'src/qwen3_reranker_pipeline/samples.py'], 'module_sha256': '76877bbfee6585e6be073a0b1e4326220ba4df27e1e8ed23e54ffd91978932d5', 'generator': 'build_notebook.py/2.2', 'notebook_spec': '2.2'}, 'python': '3.12.12', 'executable': '/content/dimer_isolated_env_bfda1e43e3a3/bin/python', 'torch': '2.14.0+cu130', 'transformers': '4.57.6', 'cuda': True}
+[colab] Executing cell 3/12 - qwen3_reranker-08...
+[colab] Executing cell 4/12 - qwen3_reranker-10...
+[colab] Executing cell 5/12 - qwen3_reranker-12...
+[colab] Executing cell 6/12 - Infrastructure: stage and digest-verify the pinned snapshot, then load the model...
+{'model_id': 'Qwen/Qwen3-Reranker-0.6B', 'revision': 'e61197ed45024b0ed8a2d74b80b4d909f1255473', 'license': 'apache-2.0', 'files': 13, 'total_bytes': 1207486774}
+{'weights_dir': '/content/weights/qwen3-reranker-0.6b', 'fetched': ['1_LogitScore/config.json', 'README.md', 'chat_template.jinja', 'config.json', 'config_sentence_transformers.json', 'generation_config.json', 'merges.txt', 'model.safetensors', 'modules.json', 'sentence_bert_config.json', 'tokenizer.json', 'tokenizer_config.json', 'vocab.json']}
+{'verified_files': 13, 'revision': 'e61197ed45024b0ed8a2d74b80b4d909f1255473'}
+{'device': 'cuda:0', 'source': 'local-snapshot'}
+[colab] Executing cell 7/12 - qwen3_reranker-16...
+{'data_source': 'Banking77 (messages → intent-phrase shortlists) (PolyAI-LDN/task-specific-datasets @ 57ec275d8078af65b7731c2a98be812d844a6d6b; CC BY 4.0 (Casanueva et al. 2020; PolyAI-LDN/task-specific-datasets))', 'instruction': 'Given a customer support message, judge whether the document names the banking intent it expresses', 'raw_rows': {'train': 10003, 'test': 3080}, 'splits': {'train': 231, 'validation': 77, 'test': 154}, 'n_documents': 77, 'file_sha256': {'train': 'b06e26ac6755...', 'test': 'd12d6e3bc4c3...'}}
+{'train': {'n': 231, 'unique_queries': 231, 'candidates': {'min': 6, 'max': 6, 'mean': 6.0}, 'query_chars': {'min': 18, 'max': 330}, 'digest': '6a5c384c1e49b1b9...'}}
+{'validation': {'n': 77, 'unique_queries': 77, 'candidates': {'min': 6, 'max': 6, 'mean': 6.0}, 'query_chars': {'min': 21, 'max': 245}, 'digest': '32cc0b974e940c85...'}}
+{'test': {'n': 154, 'unique_queries': 154, 'candidates': {'min': 6, 'max': 6, 'mean': 6.0}, 'query_chars': {'min': 16, 'max': 206}, 'digest': 'a67a92bd75cf5365...'}}
+{'example': {'id': 'train-0000', 'query': 'What happened to my top-up? I think it was cancelled.', 'positive': 'top up reverted', 'negatives': ['automatic top up', 'pending top up', 'top up failed', 'declined card payment', 'card delivery estimate']}}
+{'probe': 'duplicate id', 'rejected': "duplicate id 'same'"}
+{'probe': 'empty query', 'rejected': 'records[0]: query is empty'}
+{'probe': 'negative equals positive', 'rejected': 'records[0]: a negative equals the positive'}
+{'probe': 'too small', 'rejected': '3 records; 8..20000 are required'}
+[colab] Executing cell 8/12 - qwen3_reranker-19...
+{'ceilings': {'MAX_PAIRS': 32, 'MAX_TEXT_CHARS': 100000, 'MAX_TEXT_TOKENS': 8192, 'MAX_TRAIN_TOKENS': 192, 'TRAIN_CANDIDATES_RANGE': (2, 8), 'MAX_EVAL_RECORDS': 2000}, 'defaults': {'TRAIN_CANDIDATES': 4}, 'yes_no_token_ids': (9693, 2152)}
+You're using a Qwen2TokenizerFast tokenizer. Please note that with a fast tokenizer, using the `__call__` method is faster than using a method to encode the text followed by a call to the `pad` method to get a padded encoding.
+{'query': 'I noticed an extra $1 charge on my statement, can you tell me why that is?', 'gold': 'extra charge on statement', 'seconds': 5.104, 'n_tokens': [97, 95, 96, 96, 98, 97], 'checks': {'one_score_per_pair': True, 'scores_in_unit_interval': True, 'ranking_is_permutation': True, 'nothing_truncated': True, 'instruction_echoed': True}, 'findings': 1, 'score_semantics': 'relevance score, not a calibrated probability; no threshold shipped'}
+1. * extra charge on statement                score 0.9707
+2.   exchange charge                          score 0.0052
+3.   cash withdrawal charge                   score 0.0049
+4.   top up by card charge                    score 0.0049
+5.   activate my card                         score 0.0026
+6.   cash withdrawal not recognised           score 0.0005
+{'shortlists_ranked_by_the_frozen_model': 3}
+[colab] Executing cell 9/12 - qwen3_reranker-22...
+{'random_floor': {'recall@1': 0.1667, 'recall@3': 0.5, 'recall@5': 0.8333, 'mrr': 0.4083}, 'baseline': 'uniformly random ordering of each candidate list (expected values)'}
+{'lexical_baseline': {'recall@1': 0.2662, 'recall@3': 0.4156, 'recall@5': 0.7532, 'mrr': 0.457, 'median_rank': 4}, 'baseline': 'Jaccard overlap of lower-cased alphanumeric tokens between query and candidate', 'seconds': 0.0}
+{'frozen_model_test': {'recall@1': 0.7338, 'recall@3': 0.9416, 'recall@5': 0.9935, 'mrr': 0.8429, 'median_rank': 1}, 'n_queries': 154, 'n_pairs': 924, 'verdict': 'measured', 'adapted': False, 'seconds': 46.7}
+{'definitions': {'recall@k': "fraction of queries whose positive document is ranked within the first k of the query's candidate list; ties count against the positive", 'mrr': 'mean over queries of 1 / rank of the positive document within its candidate list', 'candidates': "each query's list is its positive followed by its negatives; lists may differ in length"}}
+{'verdict_frozen_vs_random_floor_mrr': 'above'}
+[colab] Executing cell 10/12 - qwen3_reranker-25...
+{'epoch': 0, 'train_loss': None, 'val_recall@1': 0.7792, 'val_recall@3': 0.961, 'val_mrr': 0.8699, 'note': 'frozen model'}
+{'epoch': 1, 'train_loss': 0.8393, 'val_recall@1': 0.8052, 'val_recall@3': 0.961, 'val_mrr': 0.8872}
+{'epoch': 2, 'train_loss': 0.8051, 'val_recall@1': 0.8182, 'val_recall@3': 0.961, 'val_mrr': 0.8937}
+{'objective': 'listwise cross-entropy of the positive over its candidates (yes-minus-no logit)', 'trainable_parameters': 31461888, 'total_parameters': 595776512, 'train_pairs': 924, 'best_epoch': 2, 'selection': 'highest validation MRR', 'started_from': 'pinned base', 'seconds': 229.0}
+[colab] Executing cell 11/12 - qwen3_reranker-28...
+{'recall@1': {'random_floor': 0.1667, 'lexical': 0.2662, 'frozen': 0.7338, 'adapted': 0.7662}}
+{'recall@3': {'random_floor': 0.5, 'lexical': 0.4156, 'frozen': 0.9416, 'adapted': 0.9545}}
+{'recall@5': {'random_floor': 0.8333, 'lexical': 0.7532, 'frozen': 0.9935, 'adapted': 0.9935}}
+{'mrr': {'random_floor': 0.4083, 'lexical': 0.457, 'frozen': 0.8429, 'adapted': 0.8634}}
+{'median_rank': {'lexical': 4, 'frozen': 1, 'adapted': 1}}
+{'delta_vs_frozen': {'recall@1': 0.0325, 'recall@3': 0.013, 'recall@5': 0.0, 'mrr': 0.0206}}
+{'verdict': {'adapted_vs_frozen_mrr': 'improved', 'frozen_vs_random_floor_mrr': 'above'}}
+{'report': 'outputs/qwen3_reranker_evaluation_report.json'}
+[colab] Executing cell 12/12 - qwen3_reranker-31...
+{'id': 'test-0000', 'gold': 'extra charge on statement', 'frozen_order': 'extra charge on statement | exchange charge | cash withdrawal charge | top up by card charge | activate my card | cash withdrawal not recognised', 'adapted_order': 'extra charge on statement | top up by card charge | exchange charge | cash withdrawal charge | activate my card | cash withdrawal not recognised', 'gold_rank_frozen': 1, 'gold_rank_adapted': 1, 'gold_score_frozen': 0.9707, 'gold_score_adapted': 0.9724}
+{'id': 'test-0001', 'gold': 'lost or stolen phone', 'frozen_order': 'lost or stolen phone | activate my card | verify my identity | exchange via app | reverted card payment? | exchange charge', 'adapted_order': 'lost or stolen phone | activate my card | verify my identity | exchange via app | reverted card payment? | exchange charge', 'gold_rank_frozen': 1, 'gold_rank_adapted': 1, 'gold_score_frozen': 0.2227, 'gold_score_adapted': 0.2814}
+{'id': 'test-0002', 'gold': 'contactless not working', 'frozen_order': 'contactless not working | activate my card | card payment not recognised | verify my identity | apple pay or google pay | pending transfer', 'adapted_order': 'contactless not working | card payment not recognised | activate my card | verify my identity | apple pay or google pay | pending transfer', 'gold_rank_frozen': 1, 'gold_rank_adapted': 1, 'gold_score_frozen': 0.133, 'gold_score_adapted': 0.1645}
+{'batch_report_verdict': 'not-measurable', 'shortlists_reordered': 2, 'of': 3}
+{'artifact': 'outputs/qwen3_reranker_adapter', 'format': 'org.valcorza.qwen3-reranker-0.6b.adapter.v1', 'instruction': 'Given a customer support message, judge whether the document names the banking intent it expresses', 'tensors': 22, 'bytes': 62926256, 'sha256': 'da24cc06b1dca6d4...'}
+You're using a Qwen2TokenizerFast tokenizer. Please note that with a fast tokenizer, using the `__call__` method is faster than using a method to encode the text followed by a call to the `pad` method to get a padded encoding.
+{'reload_parity': {'scores_identical': True, 'mrr_in_memory': 0.9125, 'mrr_reloaded': 0.9125}, 'reloaded_best_epoch': 2}
+['qwen3_reranker_adapter', 'qwen3_reranker_evaluation_report.json', 'qwen3_reranker_input_manifest.json', 'qwen3_reranker_reranking.csv', 'qwen3_reranker_result.json', 'qwen3_reranker_train.csv']
+[colab] Saving notebook with outputs to '/home/kurt/colab-runs/qwen3-reranker-pipeline-d064746-745fb0/qwen3_reranker_colab_d064746_colab-cli-t4_output.ipynb'...
