@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from .metrics import jaccard, record_seed
-from .pipeline import MAX_TEXT_CHARS, MODEL_ID
+from .pipeline import MAX_EVAL_RECORDS, MAX_TEXT_CHARS, MODEL_ID
 
 CORPUS_NAME = "Banking77 (messages → intent-phrase shortlists)"
 CORPUS_RELEASE = "PolyAI-LDN/task-specific-datasets @ 57ec275d8078af65b7731c2a98be812d844a6d6b"
@@ -327,10 +327,15 @@ def split_dataset(
     test_fraction: float = 0.2,
     seed: int = 0,
 ) -> dict[str, list[dict[str, Any]]]:
-    """Seeded shuffle of a BYOD dataset into train/validation/test after de-duplicating queries."""
+    """Seeded shuffle of a BYOD dataset into train/validation/test after de-duplicating queries.
+
+    The dataset is checked once, by its own size: at least MIN_RECORDS records must stay for training, the
+    validation split (when val_fraction > 0) and the test split need one record each, and neither evaluated
+    split may exceed MAX_EVAL_RECORDS (what `evaluate` scores in one call). `split_size_bounds` gives the
+    accepted range of distinct queries (12..10,002 at the default fractions)."""
     if not (0.0 <= val_fraction < 1.0 and 0.0 < test_fraction < 1.0 and val_fraction + test_fraction < 1.0):
         raise ValueError("fractions must satisfy 0 <= val < 1, 0 < test < 1, val + test < 1")
-    checked = validate_dataset(records)["records"]
+    checked = validate_dataset(records, min_records=1)["records"]
     seen: set[str] = set()
     unique = []
     for record in checked:
@@ -338,19 +343,43 @@ def split_dataset(
         if key not in seen:
             seen.add(key)
             unique.append(record)
+    if not _split_sizes_ok(len(unique), val_fraction, test_fraction):
+        low, high = split_size_bounds(val_fraction=val_fraction, test_fraction=test_fraction)
+        raise ValueError(
+            f"the dataset has {len(unique)} distinct queries (of {len(checked)} records); the split keeps "
+            f"{test_fraction:.0%} for test and {val_fraction:.0%} for validation (each scored in one call "
+            f"of at most {MAX_EVAL_RECORDS} records) and needs {MIN_RECORDS} for training, so {low}..{high} "
+            "distinct queries are required"
+        )
     random.Random(seed).shuffle(unique)
     n_test = max(1, round(len(unique) * test_fraction))
     n_val = round(len(unique) * val_fraction)
-    splits = {
+    return {
         "test": unique[:n_test],
         "validation": unique[n_test : n_test + n_val],
         "train": unique[n_test + n_val :],
     }
-    if len(splits["train"]) < MIN_RECORDS:
-        raise ValueError(
-            f"split leaves {len(splits['train'])} training records; at least {MIN_RECORDS} are required"
-        )
-    return splits
+
+
+def _split_sizes_ok(n: int, val_fraction: float, test_fraction: float) -> bool:
+    n_test = max(1, round(n * test_fraction))
+    n_val = round(n * val_fraction)
+    return (
+        n - n_test - n_val >= MIN_RECORDS
+        and n_test <= MAX_EVAL_RECORDS
+        and n_val <= MAX_EVAL_RECORDS
+        and (val_fraction == 0.0 or n_val >= 1)
+    )
+
+
+def split_size_bounds(*, val_fraction: float = 0.15, test_fraction: float = 0.2) -> tuple[int, int]:
+    """The smallest and largest number of distinct queries `split_dataset` accepts at these fractions:
+    MIN_RECORDS left for training, one record in each evaluated split, and no evaluated split above
+    MAX_EVAL_RECORDS ((12, 10002) at the defaults)."""
+    accepted = [n for n in range(1, MAX_RECORDS + 1) if _split_sizes_ok(n, val_fraction, test_fraction)]
+    if not accepted:
+        raise ValueError("no dataset size satisfies these fractions")
+    return accepted[0], accepted[-1]
 
 
 def load_byod_dataset(path: str | Path) -> list[dict[str, Any]]:

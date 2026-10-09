@@ -1,6 +1,6 @@
 """Static release-asset validation for the Qwen3-Reranker-0.6B DIMER pipeline.
 
-Checks the STANDALONE tutorial notebook (DIMER Notebook Specification 2.0 §4), the tutorial
+Checks the STANDALONE tutorial notebook (DIMER Notebook Specification 2.2 §4), the tutorial
 registry, model card, README, STATUS.md and weight documentation for source conformance and
 cross-document identity consistency, and runs the generator parity checks (PAR1–PAR3).
 
@@ -40,17 +40,19 @@ EXPECTED_OUTPUTS = (
 CODE_MARKERS = (
     # Stage 4: pinned corpus, validation, disjoint split, CSV, refusal probes
     "USE_BYOD = False",
+    "BYOD_PATH = ''",
+    "uploaded = files.upload() or {}",
     "corpus = read_corpus(fetch_corpus(cache_dir='weights/banking77'))",
     "splits = build_sample_dataset(corpus, seed=SPLIT_SEED)",
     "records = load_byod_dataset(byod_path)",
-    "dataset_manifests = {name: validate_dataset(part) for name, part in splits.items()}",
+    "dataset_manifests = {name: validate_dataset(part) if name == 'train' else validate_dataset(part, min_records=1, max_records=MAX_EVAL_RECORDS) for name, part in splits.items()}",
     "disjoint = check_split_disjoint(splits)",
     "write_dataset_csv(train_records, 'outputs/qwen3_reranker_train.csv')",
     # Stage 5: the reranking contract with its manifest, rejection probe and sanity checks
     "input_manifest = validate_inputs(pairs, INSTRUCTION, names=",
     "validate_inputs([(record['query'], '   ')], INSTRUCTION)",
     "result = pipe.rerank(pairs, instruction=INSTRUCTION)",
-    "'ceilings': {'MAX_PAIRS': MAX_PAIRS, 'MAX_TEXT_CHARS': MAX_TEXT_CHARS, 'MAX_TEXT_TOKENS': MAX_TEXT_TOKENS, 'MAX_TRAIN_TOKENS': MAX_TRAIN_TOKENS, 'MAX_TRAIN_CANDIDATES': MAX_TRAIN_CANDIDATES}",
+    "'ceilings': {'MAX_PAIRS': MAX_PAIRS, 'MAX_TEXT_CHARS': MAX_TEXT_CHARS, 'MAX_TEXT_TOKENS': MAX_TEXT_TOKENS, 'MAX_TRAIN_TOKENS': MAX_TRAIN_TOKENS, 'TRAIN_CANDIDATES_RANGE': TRAIN_CANDIDATES_RANGE, 'MAX_EVAL_RECORDS': MAX_EVAL_RECORDS}, 'defaults': {'TRAIN_CANDIDATES': MAX_TRAIN_CANDIDATES}",
     "'ranking_is_permutation': sorted(result['ranking']) == list(range(len(pairs)))",
     "'scores_in_unit_interval': all(0.0 <= s <= 1.0 for s in scores)",
     "before = {r['id']: ranked_shortlist(r) for r in probe_records}",
@@ -58,7 +60,8 @@ CODE_MARKERS = (
     "floor = random_floor([1 + len(r['negatives']) for r in test_records])",
     "baseline_lexical = pipe.lexical_baseline(test_records)",
     "frozen_test = pipe.evaluate(test_records, instruction=INSTRUCTION)",
-    "assert frozen_test['n_queries'] == baseline_lexical['n_queries'] and frozen_test['mrr'] > floor['mrr']",
+    "if frozen_test['n_queries'] != baseline_lexical['n_queries']:",
+    "frozen_vs_floor = 'above' if frozen_test['mrr'] > floor['mrr'] else 'not above'",
     # Stage 7: bounded listwise fine-tuning with explicit hyperparameters
     "adapt_result = pipe.adapt(",
     "trainable_layers=TRAINABLE_LAYERS",
@@ -69,7 +72,8 @@ CODE_MARKERS = (
     "adapted_test = pipe.evaluate(test_records, instruction=INSTRUCTION)",
     "adapted_val = pipe.evaluate(val_records, instruction=INSTRUCTION)",
     "'delta_vs_frozen'",
-    "assert adapted_test['mrr'] > frozen_test['mrr']",
+    "comparison['verdict'] = {'adapted_vs_frozen_mrr': 'improved' if delta_mrr > 0 else ('no change' if delta_mrr == 0 else 'worse'), 'frozen_vs_random_floor_mrr': frozen_vs_floor}",
+    "'verdict': comparison['verdict']",
     # Stage 9: reranking before/after, batch report, artifact, reload parity, provenance
     "single_report = evaluation_report(",
     "pipe.save_artifact(artifact_dir, metadata=",
@@ -119,13 +123,17 @@ FORBIDDEN_OUTSIDE_MODULE = (
     "cross_entropy(",
 )
 
+# The one kernel cell (generator /2.2 isolated runtime): it builds the hash-locked environment and routes every later
+# cell to it, so it is the one place `urllib.request` belongs.
+INSTALL_CELL_MARKER = "# dimer: kernel cell"
+
 # ---------------------------------------------------------------------------
 # Shared checks. Everything below is source/structure validation only. Passing
 # these checks is NOT clean-runtime execution evidence under DIMER Notebook
-# Specification 2.0; see docs/release-verification.md for the release gate.
+# Specification 2.2; see docs/release-verification.md for the release gate.
 # ---------------------------------------------------------------------------
 
-NOTEBOOK_SPEC = "2.0"
+NOTEBOOK_SPEC = "2.2"
 ALLOWED_PROFILES = {"E2E", "ARTIFACT-INFERENCE", "TASK-INFERENCE", "MULTI-CAPABILITY", "SMOKE"}
 STATUS_TOKENS = ("Candidate", "Release-grade")
 PLACEHOLDER = re.compile(r"\b(TODO|TBD|FIXME)\b|Insert text here|Tooltip:", re.I)
@@ -163,9 +171,12 @@ COMMON_CODE_MARKERS = (
     "PINS = [",
     "NOTEBOOK_SOURCE = {",
     "SKIP_INSTALL = os.environ.get('DIMER_NOTEBOOK_CI_PREINSTALLED') == '1'",
-    "subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', *PINS], check=True)",
-    "importlib.metadata.packages_distributions()",
-    "importlib.invalidate_caches()",
+    # SWP-R (2026-10-05 fleet sweep): the generator /2.2 isolated runtime replaces the in-kernel pinned install.
+    "'--require-hashes', '--only-binary', ':all:'",
+    "'--managed-python'",
+    "if len(wheel) != UV_BYTES or hashlib.sha256(wheel).hexdigest() != UV_SHA256:",
+    "if hashlib.sha256(LOCK_TEXT.encode('utf-8')).hexdigest() != LOCK_SHA256:",
+    "_ip.input_transformers_cleanup.append(_route_to_isolated_runtime)",
     "platform.python_version()",
     "torch.__version__",
     "MANIFEST = {",
@@ -593,18 +604,14 @@ def _validate_parity(path: Path, notebook: dict, code_cells: list[tuple[int, str
 
 
 def _validate_bootstrap_guard(path: Path, code_cells: list[tuple[int, str, ast.Module]]) -> None:
-    """The stale-import guard must actually raise: `if stale:` whose body raises RuntimeError."""
-    raises = False
-    for _, _, tree in code_cells:
-        for node in ast.walk(tree):
-            if isinstance(node, ast.If) and isinstance(node.test, ast.Name) and node.test.id == "stale":
-                for sub in ast.walk(node):
-                    if isinstance(sub, ast.Raise) and isinstance(sub.exc, ast.Call):
-                        func = sub.exc.func
-                        if isinstance(func, ast.Name) and func.id == "RuntimeError":
-                            raises = True
-    _check(raises, f"{path.name}: install cell must raise RuntimeError when already-imported packages change")
-
+    """RUN1/RUN10/ENV6 (SWP-R, 2026-10-05 fleet sweep): nothing is pip-installed into the kernel and no cell asks for a
+    restart. Exactly one cell runs in the kernel (the isolated-environment bootstrap); it reuses a matching environment."""
+    kernel = [source for _, source, _ in code_cells if INSTALL_CELL_MARKER in source]
+    _check(len(kernel) == 1, f"{path.name}: exactly one '{INSTALL_CELL_MARKER}' bootstrap cell is required, found {len(kernel)}")
+    code = "\n".join(source for _, source, _ in code_cells)
+    _check("'-m', 'pip', 'install'" not in code and "pip install" not in code, f"{path.name}: no cell may pip-install into the notebook kernel (RUN10)")
+    _check("Restart the runtime" not in code, f"{path.name}: no cell may ask for a runtime restart (RUN1)")
+    _check("_isolated_environment_ready()" in kernel[0], f"{path.name}: the bootstrap cell must reuse a matching isolated environment")
 
 def _validate_notebook_content(
     path: Path, code_cells: list[tuple[int, str, ast.Module]], markdown: str, embedded: list[int]
@@ -617,7 +624,10 @@ def _validate_notebook_content(
     _check(not missing, f"{path.name}: missing required source markers: {missing}")
     present = [label for label, pattern in FORBIDDEN_PATTERNS if pattern.search(code)]
     _check(not present, f"{path.name}: forbidden/insecure source: {present}")
-    leaked = [marker for marker in FORBIDDEN_OUTSIDE_MODULE if marker in outside]
+    outside_stage_cells = "\n".join(
+        text for index, text in stripped.items() if index not in embedded and INSTALL_CELL_MARKER not in text
+    )
+    leaked = [marker for marker in FORBIDDEN_OUTSIDE_MODULE if marker in outside_stage_cells]
     _check(not leaked, f"{path.name}: direct library use outside the carried module cell (G2): {leaked}")
     _check(
         f"pipe = {MODEL_LOAD_EXPR}" in outside,

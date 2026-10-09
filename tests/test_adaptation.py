@@ -261,7 +261,7 @@ def test_split_dataset_deduplicates_and_is_seeded(forbid_model_imports):
     assert split_dataset(records, val_fraction=0.1, test_fraction=0.2, seed=3) == splits
     with pytest.raises(ValueError, match="fractions"):
         split_dataset(records, val_fraction=0.5, test_fraction=0.6)
-    with pytest.raises(ValueError, match="at least"):
+    with pytest.raises(ValueError, match="distinct queries are required"):
         split_dataset(records, val_fraction=0.0, test_fraction=0.9)
 
 
