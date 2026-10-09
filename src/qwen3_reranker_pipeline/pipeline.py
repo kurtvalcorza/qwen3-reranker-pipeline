@@ -42,7 +42,8 @@ PARAMETER_COUNT = 595_776_512  # Qwen3ForCausalLM with the output projection tie
 DECODER_LAYERS = 28  # config.json num_hidden_layers
 DEFAULT_TRAINABLE_LAYERS = 2  # the last two decoder layers (31,461,888 parameters)
 MAX_TRAIN_TOKENS = 192  # training-only prompt ceiling (inference truncates the pair to MAX_TEXT_TOKENS)
-MAX_TRAIN_CANDIDATES = 4  # per query: the positive plus the first negatives, scored together in one list
+MAX_TRAIN_CANDIDATES = 4  # the DEFAULT list length per query (positive + first negatives); not a ceiling
+TRAIN_CANDIDATES_RANGE = (2, 8)  # what adapt() accepts for train_candidates: the enforced bounds
 MAX_EVAL_RECORDS = 2_000
 MIN_SCORED_RECORDS = 50  # below this a scored dataset is labelled a small sample
 ARTIFACT_FORMAT = "org.valcorza.qwen3-reranker-0.6b.adapter.v1"
@@ -460,8 +461,9 @@ class Qwen3RerankerPipeline:
             raise ValueError("lr must be in (0, 1e-3]")
         if not isinstance(batch_size, int) or not 1 <= batch_size <= 16:
             raise ValueError("batch_size must be an int in 1..16")
-        if not isinstance(train_candidates, int) or not 2 <= train_candidates <= 8:
-            raise ValueError("train_candidates must be an int in 2..8")
+        low, high = TRAIN_CANDIDATES_RANGE
+        if not isinstance(train_candidates, int) or not low <= train_candidates <= high:
+            raise ValueError(f"train_candidates must be an int in {low}..{high}")
         _check_inputs([("x", "y")], instruction)
         names = self._trainable_names(trainable_layers)
         train_checked = validate_dataset(train)["records"]

@@ -1,6 +1,6 @@
 """Static release-asset validation for the Qwen3-Reranker-0.6B DIMER pipeline.
 
-Checks the STANDALONE tutorial notebook (DIMER Notebook Specification 2.0 §4), the tutorial
+Checks the STANDALONE tutorial notebook (DIMER Notebook Specification 2.2 §4), the tutorial
 registry, model card, README, STATUS.md and weight documentation for source conformance and
 cross-document identity consistency, and runs the generator parity checks (PAR1–PAR3).
 
@@ -45,14 +45,14 @@ CODE_MARKERS = (
     "corpus = read_corpus(fetch_corpus(cache_dir='weights/banking77'))",
     "splits = build_sample_dataset(corpus, seed=SPLIT_SEED)",
     "records = load_byod_dataset(byod_path)",
-    "dataset_manifests = {name: validate_dataset(part) for name, part in splits.items()}",
+    "dataset_manifests = {name: validate_dataset(part) if name == 'train' else validate_dataset(part, min_records=1, max_records=MAX_EVAL_RECORDS) for name, part in splits.items()}",
     "disjoint = check_split_disjoint(splits)",
     "write_dataset_csv(train_records, 'outputs/qwen3_reranker_train.csv')",
     # Stage 5: the reranking contract with its manifest, rejection probe and sanity checks
     "input_manifest = validate_inputs(pairs, INSTRUCTION, names=",
     "validate_inputs([(record['query'], '   ')], INSTRUCTION)",
     "result = pipe.rerank(pairs, instruction=INSTRUCTION)",
-    "'ceilings': {'MAX_PAIRS': MAX_PAIRS, 'MAX_TEXT_CHARS': MAX_TEXT_CHARS, 'MAX_TEXT_TOKENS': MAX_TEXT_TOKENS, 'MAX_TRAIN_TOKENS': MAX_TRAIN_TOKENS, 'MAX_TRAIN_CANDIDATES': MAX_TRAIN_CANDIDATES}",
+    "'ceilings': {'MAX_PAIRS': MAX_PAIRS, 'MAX_TEXT_CHARS': MAX_TEXT_CHARS, 'MAX_TEXT_TOKENS': MAX_TEXT_TOKENS, 'MAX_TRAIN_TOKENS': MAX_TRAIN_TOKENS, 'TRAIN_CANDIDATES_RANGE': TRAIN_CANDIDATES_RANGE, 'MAX_EVAL_RECORDS': MAX_EVAL_RECORDS}, 'defaults': {'TRAIN_CANDIDATES': MAX_TRAIN_CANDIDATES}",
     "'ranking_is_permutation': sorted(result['ranking']) == list(range(len(pairs)))",
     "'scores_in_unit_interval': all(0.0 <= s <= 1.0 for s in scores)",
     "before = {r['id']: ranked_shortlist(r) for r in probe_records}",
@@ -130,10 +130,10 @@ INSTALL_CELL_MARKER = "# dimer: kernel cell"
 # ---------------------------------------------------------------------------
 # Shared checks. Everything below is source/structure validation only. Passing
 # these checks is NOT clean-runtime execution evidence under DIMER Notebook
-# Specification 2.0; see docs/release-verification.md for the release gate.
+# Specification 2.2; see docs/release-verification.md for the release gate.
 # ---------------------------------------------------------------------------
 
-NOTEBOOK_SPEC = "2.0"
+NOTEBOOK_SPEC = "2.2"
 ALLOWED_PROFILES = {"E2E", "ARTIFACT-INFERENCE", "TASK-INFERENCE", "MULTI-CAPABILITY", "SMOKE"}
 STATUS_TOKENS = ("Candidate", "Release-grade")
 PLACEHOLDER = re.compile(r"\b(TODO|TBD|FIXME)\b|Insert text here|Tooltip:", re.I)

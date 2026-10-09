@@ -1,4 +1,4 @@
-"""Per-repository template for tools/build_notebook.py (NOTEBOOK_SPEC 2.0 §4 standalone carrier).
+"""Per-repository template for tools/build_notebook.py (NOTEBOOK_SPEC 2.2 §4 standalone carrier).
 
 Only the task-specific prose and stage cells live here. Runtime install, the embedded pipeline
 modules (pipeline.py, metrics.py, samples.py), and the model pin/stage/verify cells are produced by
@@ -47,7 +47,7 @@ TEMPLATE = {
         "held-out split again, reranks the same shortlists with the adapted model, exports the adapter as safetensors with "
         "a manifest, and reloads that artifact into a fresh pipeline to verify parity. The default path needs no "
         "repository clone, no DIMER worker or service, no credential, no upload dialog and no configuration edit "
-        "(NOTEBOOK_SPEC 2.0 §5). On CPU the whole path takes about fifteen minutes of model time after the downloads — "
+        "(NOTEBOOK_SPEC 2.2 §5). On CPU the whole path takes about fifteen minutes of model time after the downloads — "
         "a cross-encoder scores every query–candidate pair with a full forward pass, so evaluation dominates; a CUDA "
         "runtime is used automatically when present (bfloat16 there, float32 on CPU)."
     ),
@@ -73,7 +73,7 @@ TEMPLATE = {
             'messages, each with its intent phrase and five shortlisted negatives (231 / 77 / 154, query-disjoint) |\n| Model | the Qwen3-Reranker-0.6B decoder, '
             'reading the `yes` / `no` logits at the last position | the same model; only the last two decoder layers train (31.5 M of 595.8 M parameters) with a '
             'listwise cross-entropy |\n| Output | one relevance score per pair (the `yes` share — not a calibrated probability) and a ranking | recall@1/3/5 and MRR '
-            'beside a random floor, a lexical baseline and the frozen model, and a 126 MB safetensors adapter that reloads with parity |\n\n**How to use this '
+            'beside a random floor, a lexical baseline and the frozen model, and a safetensors adapter (about 126 MB in float32 on CPU, 63 MB in bfloat16 on CUDA) that reloads with parity |\n\n**How to use this '
             'notebook.** Choose a runtime (**Runtime → Change runtime type → T4 GPU** is strongly recommended), then **Runtime → Run all**. Run all completes in '
             "one pass: Section 1 installs nothing into the notebook's own Python, so no restart is needed. Sections 1–3 are **infrastructure** — the isolated "
             'environment, the carried package and the model snapshot — and their cells are collapsed; you may run them without studying them. The learning path '
@@ -81,7 +81,9 @@ TEMPLATE = {
             'principal result the notebook asks you to **Predict**; after it come **What to notice** and a collapsible **Check your reasoning** with a worked '
             "answer from the recorded run (the Kaggle Tesla T4 run of 19 September 2026 recorded in `docs/release-verification.md`, bfloat16 on CUDA; the prose's "
             'build-record numbers are the float32 CPU run, so the two differ in the last digits). Every adaptation starts from the pinned base, so re-running '
-            'Section 7 with other settings is a fresh experiment. **Troubleshooting**, a **Glossary** and a **Conclusion** template are at the end. Writing your '
+            'Section 7 with other settings is a fresh experiment; Sections 5 and 6 put the pinned base back before they measure, so their numbers are always the '
+            "frozen model's, and after re-running them you re-run Section 7 before Sections 8 and 9 (those two cells refuse to treat the base as \"adapted\"). "
+            '**Troubleshooting**, a **Glossary** and a **Conclusion** template are at the end. Writing your '
             'predictions down is optional.\n\n**Roadmap:** 1–3 infrastructure → 4 the Banking77 corpus, shortlists, validation and the split *(evaluation practice)* '
             '→ 5 the reranking contract *(core concept: relevance scores, not probabilities)* → 6 the random floor, the lexical baseline and the frozen model '
             '*(evaluation practice)* → 7 bounded listwise fine-tuning *(core concept)* → 8 held-out evaluation *(evaluation practice)* → 9 reranking before and '
@@ -160,7 +162,7 @@ TEMPLATE = {
     "prerequisites": [
         "- **Runtime:** a fresh supported runtime (Google Colab or Jupyter, Python 3.12). The default path runs on CPU and uses CUDA automatically when available. **Precision differs by device:** the pipeline runs float32 on CPU and bfloat16 on CUDA, so scores and the recorded metrics can differ between the two. CPU is adequate but not fast for a cross-encoder: the build record measured about 5 s to load and digest-verify the 1.19 GB snapshot, about 132 s to score the 154 test shortlists (924 pairs) and about 170 s per training epoch over 231 shortlists plus a validation pass per epoch. Building the isolated environment (the pinned `torch==2.14.0` among its packages; reused on a re-run) and the 1.19 GB checkpoint are the large downloads of the run.",
         "- **Knowledge:** basic Python; what a cross-encoder does and why it scores one pair per forward pass; what recall@k and mean reciprocal rank measure over a candidate list; what a listwise softmax loss does.",
-        "- **Data contract:** records are `{id, query, positive, negatives}` — a query of 1..100,000 characters, a positive document of 1..1,000 characters and 1..15 distinct negative documents (the pair prompt is truncated longest-first to 8,192 tokens at inference and to 192 tokens **during training only**), ids matching `[A-Za-z0-9_.:-]{1,64}` and unique; a dataset needs 8..20,000 records; queries are de-duplicated case-insensitively before splitting so the same message never sits in two splits. BYOD accepts CSV (negatives separated by ` | `), JSON or JSONL in that shape.",
+        "- **Data contract:** records are `{id, query, positive, negatives}` — a query of 1..100,000 characters, a positive document of 1..1,000 characters and 1..15 distinct negative documents (the pair prompt is truncated longest-first to 8,192 tokens at inference and to 192 tokens **during training only**), ids matching `[A-Za-z0-9_.:-]{1,64}` and unique; a training set needs 8..20,000 records, and a BYOD dataset needs **12..10,002 distinct queries** (`split_size_bounds()`: 20 % go to test and 15 % to validation, each scored in one call of at most `MAX_EVAL_RECORDS` = 2,000 records, and at least 8 must stay for training); queries are de-duplicated case-insensitively before splitting so the same message never sits in two splits. BYOD accepts CSV (negatives separated by ` | `), JSON or JSONL in that shape.",
         "- **Validation is structural, not semantic:** nothing checks that a positive is relevant to its query, that the negatives are not, or that the instruction describes the judgement — a mislabelled record set is fine-tuned on without complaint.",
         "- **Privacy:** Do not upload confidential or restricted data to a hosted runtime unless you are authorized to process it there — an internal query log with its relevance labels is exactly that. The default path uploads nothing.",
         "- **External access (data):** besides the Hub, the default path fetches two pinned objects (`train.csv` 839,073 bytes, `test.csv` 239,961 bytes; SHA-256 `b06e26ac…` / `d12d6e3b…`) from `raw.githubusercontent.com` at the pinned `PolyAI-LDN/task-specific-datasets` commit over HTTPS, each refused on any mismatch before it is read; Banking77 is CC BY 4.0 (Casanueva et al., 2020).",
@@ -179,7 +181,9 @@ TEMPLATE = {
                 "`train` member (disjoint messages) and 2 test records per intent from the `test` member by a seeded "
                 "shuffle — the release's own partition, balanced over all 77 intents. `validate_dataset` then checks every "
                 "record against the contract, `check_split_disjoint` asserts no message appears in two splits, and the "
-                "training split is written to `outputs/{stem}_train.csv` in the shape BYOD expects. `INSTRUCTION` is "
+                "training split is written to `outputs/{stem}_train.csv` in the shape BYOD expects. A BYOD file is split by "
+                "`split_dataset`, which checks its size once and names it: 12..10,002 distinct queries at the default "
+                "fractions. The 8-record minimum applies to the training split; validation and test need one record each. `INSTRUCTION` is "
                 "the judgement every pair carries in later cells.\n\n"
                 "Look for: 10,003 + 3,080 raw rows, two digests, splits 231 / 77 / 154, six candidates per query, and "
                 "four refusal probes — a duplicate id, an empty query, a negative equal to the positive and a dataset too "
@@ -228,7 +232,8 @@ TEMPLATE = {
                 "    splits = build_sample_dataset(corpus, seed=SPLIT_SEED)\n"
                 "    data_source = f'{{CORPUS_NAME}} ({{CORPUS_RELEASE}}; {{CORPUS_LICENSE}})'\n"
                 "train_records, val_records, test_records = splits['train'], splits['validation'], splits['test']\n"
-                "dataset_manifests = {{name: validate_dataset(part) for name, part in splits.items()}}\n"
+                "# RR-M3: the 8-record floor is the training floor; validation and test need one record each (split_dataset checked the sizes).\n"
+                "dataset_manifests = {{name: validate_dataset(part) if name == 'train' else validate_dataset(part, min_records=1, max_records=MAX_EVAL_RECORDS) for name, part in splits.items()}}\n"
                 "disjoint = check_split_disjoint(splits)\n"
                 "write_dataset_csv(train_records, 'outputs/{stem}_train.csv')\n"
                 "print({{'data_source': data_source, 'instruction': INSTRUCTION, 'raw_rows': raw_rows, 'splits': disjoint, 'n_documents': len(documents(test_records)), 'file_sha256': {{k: v[2][:12] + '...' for k, v in CORPUS_FILES.items()}}}})\n"
@@ -252,8 +257,8 @@ TEMPLATE = {
         {
             "md": (
                 '**What to notice:** 10,003 + 3,080 raw rows, splits 231 / 77 / 154, six candidates per query, and the four refusals.\n\n<details><summary>Check your '
-                'reasoning</summary>Mostly the lexical baseline: word-overlap negatives are exactly what a word counter confuses with the answer, so the floor is '
-                'deliberately hard to beat by words alone, and a reranker has to judge meaning. The shortlist is seeded per record id, so it reproduces; the splits are '
+                'reasoning</summary>The lexical baseline: three of the five negatives are, by construction, the phrases with the most words in common with the '
+                'message, so a word counter is set up to fail here — Section 6 shows it can even rank below a random ordering — while a reranker has to judge meaning. The shortlist is seeded per record id, so it reproduces; the splits are '
                 'query-disjoint. The refusals (duplicate id, empty query, a negative equal to the positive, too small) stop before `torch` runs.</details>'
             ),
         },
@@ -268,16 +273,23 @@ TEMPLATE = {
                 "`score` per pair (the `yes` share of a two-way softmax — a **relevance score, not a calibrated "
                 "probability**), the `ranking` as a permutation of the pairs, `n_tokens` and `truncated` flags. The "
                 "ranked shortlist is printed with the gold intent marked; the frozen rankings of three test shortlists are "
-                "kept as the *before* column for Section 9.\n\n"
+                "kept as the *before* column for Section 9. The cell first puts the pinned base back (`restore_base`) if an "
+                "earlier Section 7 adapted the model, so a re-run — for example with your own data — always shows the frozen model "
+                "here. The printed `ceilings` are what the pipeline enforces; `TRAIN_CANDIDATES` = `MAX_TRAIN_CANDIDATES` (4) is only "
+                "the default list length, and `adapt` accepts any value in `TRAIN_CANDIDATES_RANGE` (2..8).\n\n"
                 "**Predict before running:** will the six scores of one shortlist add up to 1?"
             ),
             "code": (
                 "import time\n\n"
+                "# RR-M2: this cell describes the frozen model, so an earlier adaptation is undone first.\n"
+                "restored_tensors = pipe.restore_base()\n"
+                "if restored_tensors:\n"
+                "    print({{'restored_pinned_base': len(restored_tensors), 'note': 'an earlier Section 7 had adapted the model; run Section 7 again before Sections 8 and 9'}})\n"
                 "probe_records = test_records[:3]\n"
                 "record = probe_records[0]\n"
                 "candidates = candidate_list(record)\n"
                 "pairs = [(record['query'], doc) for doc in candidates]\n"
-                "print({{'ceilings': {{'MAX_PAIRS': MAX_PAIRS, 'MAX_TEXT_CHARS': MAX_TEXT_CHARS, 'MAX_TEXT_TOKENS': MAX_TEXT_TOKENS, 'MAX_TRAIN_TOKENS': MAX_TRAIN_TOKENS, 'MAX_TRAIN_CANDIDATES': MAX_TRAIN_CANDIDATES}}, 'yes_no_token_ids': (YES_TOKEN_ID, NO_TOKEN_ID)}})\n"
+                "print({{'ceilings': {{'MAX_PAIRS': MAX_PAIRS, 'MAX_TEXT_CHARS': MAX_TEXT_CHARS, 'MAX_TEXT_TOKENS': MAX_TEXT_TOKENS, 'MAX_TRAIN_TOKENS': MAX_TRAIN_TOKENS, 'TRAIN_CANDIDATES_RANGE': TRAIN_CANDIDATES_RANGE, 'MAX_EVAL_RECORDS': MAX_EVAL_RECORDS}}, 'defaults': {{'TRAIN_CANDIDATES': MAX_TRAIN_CANDIDATES}}, 'yes_no_token_ids': (YES_TOKEN_ID, NO_TOKEN_ID)}})\n"
                 "input_manifest = validate_inputs(pairs, INSTRUCTION, names=[f'{{record[\"id\"]}}-cand-{{i}}' for i in range(len(pairs))])\n"
                 "try:\n"
                 "    validate_inputs([(record['query'], '   ')], INSTRUCTION)\n"
@@ -321,20 +333,27 @@ TEMPLATE = {
                 "## 6. The random floor, the lexical baseline and the frozen model on the test split\n\n"
                 "Three numbers frame the adaptation, all over the same 154 six-entry shortlists. The **random floor** is "
                 "what a uniformly random ordering achieves in expectation (recall@1 = 1 / 6, MRR ≈ 0.41). The **lexical "
-                "baseline** orders each shortlist by Jaccard token overlap with the message — and because three of the "
-                "five negatives were chosen for high overlap, this floor is deliberately hard to beat by words alone. "
+                "baseline** orders each shortlist by Jaccard token overlap with the message. It is a sanity reference, not a "
+                "competitor: three of the five negatives were *chosen* as the phrases with the highest overlap, so this baseline "
+                "is weakened by construction and can score **below the random floor** — the recorded runs show it at recall@3 "
+                "(0.4156 against 0.5) and recall@5 (0.7532 against 0.8333). Beating it shows the reranker is not just "
+                "counting words; it is not evidence of skill on its own. "
                 "`pipe.evaluate` scores every query–candidate pair through `rerank` (`MAX_PAIRS` at a time), orders each "
                 "shortlist by the relevance score and reads the rank of the positive; ties are counted against it. Look "
                 "for the frozen reranker well above both — the build record saw recall@1 around 73.4 % and MRR "
                 "around 0.843 — and read `median_rank` beside the means. About 132 s on CPU: 924 forward "
-                "passes. Whether the frozen model beats the random floor is recorded as a **verdict**, not asserted, so a run on your "
-                "own shortlists continues either way.\n\n"
+                "passes. Like Section 5, the cell puts the pinned base back first, so `frozen_model_test` is always the "
+                "pretrained model (`adapted: False`). Whether the frozen model beats the random floor is recorded as a "
+                "**verdict**; on your own shortlists the run continues either way, while on the Banking77 sample a frozen model "
+                "at or below the floor stops the cell, because that would mean a broken run.\n\n"
                 "*Evaluation practice.* **Predict before running:** on these hard-negative shortlists, will the lexical baseline even beat "
                 "the random floor on recall@1?"
             ),
             "code": (
                 "def brief(m):\n"
                 "    return {{k: round(m[k], 4) for k in ('recall@1', 'recall@3', 'recall@5', 'mrr')}} | {{'median_rank': m.get('median_rank')}}\n\n"
+                "if pipe.restore_base():  # RR-M2: the frozen numbers are always the pinned base's\n"
+                "    print({{'restored_pinned_base': True, 'note': 'an earlier Section 7 had adapted the model; run Section 7 again before Sections 8 and 9'}})\n"
                 "floor = random_floor([1 + len(r['negatives']) for r in test_records])\n"
                 "print({{'random_floor': {{k: round(floor[k], 4) for k in ('recall@1', 'recall@3', 'recall@5', 'mrr')}}, 'baseline': floor['baseline']}})\n"
                 "t0 = time.perf_counter()\n"
@@ -349,7 +368,9 @@ TEMPLATE = {
                 "    raise RuntimeError(f\"contract: the frozen model ranked {{frozen_test['n_queries']}} shortlists, the lexical baseline {{baseline_lexical['n_queries']}}\")\n"
                 "# SWP-A: the quality comparison is a recorded verdict, not an assert, so a BYOD run still reaches adaptation and export.\n"
                 "frozen_vs_floor = 'above' if frozen_test['mrr'] > floor['mrr'] else 'not above'\n"
-                "print({{'verdict_frozen_vs_random_floor_mrr': frozen_vs_floor}})"
+                "print({{'verdict_frozen_vs_random_floor_mrr': frozen_vs_floor}})\n"
+                "if not USE_BYOD and frozen_vs_floor != 'above':\n"
+                "    raise RuntimeError(f\"On the Banking77 sample the frozen model must rank above the random floor (MRR {{frozen_test['mrr']:.4f}} vs {{floor['mrr']:.4f}}): the snapshot or the corpus is not the pinned one. Run all again from the top.\")"
             ),
         },
         {
@@ -373,7 +394,7 @@ TEMPLATE = {
                 "`MAX_TRAIN_TOKENS` (192) **during training only**. Epoch 0 records the frozen model's validation ranking "
                 "metrics; every epoch is scored the same way, and the epoch with the highest validation MRR is kept.\n\n"
                 "Watch validation recall@1 climb over two epochs (about 170 s of training plus a validation pass per "
-                "epoch on CPU). The build record's sweep on this sample: two layers at 2e-5 reached recall@1 77.9 % (validation MRR still rising at epoch 2); two layers at 5e-5 peaked at epoch 1 and ended at 76.0 % — the default keeps 2e-5. "
+                "epoch on CPU). The CPU float32 build record's sweep on this sample (held-out recall@1): two layers at 2e-5 reached 77.9 % (validation MRR still rising at epoch 2); two layers at 5e-5 peaked at epoch 1 and ended at 76.0 % — the default keeps 2e-5. On a CUDA GPU the model runs in bfloat16: the recorded Kaggle Tesla T4 run of the default reached 76.6 %, so expect the mid to high seventies depending on the device. "
                 "Every call starts from the pinned base (`started_from` in the printed result), so a re-run with other settings is a "
                 "fresh experiment, not continued training, and epoch 0 is always the frozen model.\n\n"
                 "**Predict before running:** the frozen reranker already ranks about three in four shortlists correctly. How much room "
@@ -384,7 +405,9 @@ TEMPLATE = {
                 "LEARNING_RATE = 2e-5  # @param {{type:\"number\"}}\n"
                 "BATCH_SIZE = 4  # @param {{type:\"integer\"}}\n"
                 "TRAINABLE_LAYERS = 2  # @param {{type:\"integer\"}}\n"
-                "TRAIN_CANDIDATES = 4  # @param {{type:\"integer\"}}\n\n"
+                "TRAIN_CANDIDATES = 4  # @param {{type:\"integer\"}}\n"
+                "# The recorded defaults; Section 8 holds the Banking77 sample to an improvement only at these settings.\n"
+                "DEFAULT_SETTINGS = (EPOCHS, LEARNING_RATE, BATCH_SIZE, TRAINABLE_LAYERS, TRAIN_CANDIDATES) == (2, 2e-5, 4, 2, 4)\n\n"
                 "def report(entry):\n"
                 "    row = {{'epoch': entry['epoch'], 'train_loss': None if entry['train_loss'] is None else round(entry['train_loss'], 4)}}\n"
                 "    if entry.get('val'):\n"
@@ -415,13 +438,17 @@ TEMPLATE = {
                 "— same shortlists, same instruction — and the four rows are put side by side. Look for recall@1 up by "
                 "several points and MRR up accordingly; the cell records whether the adapted MRR is above the frozen MRR as a "
                 "**verdict** (`improved`, `no change` or `worse`) in the report and `result.json` instead of asserting it, so a run on "
-                "your own shortlists that does not improve still exports and reloads. 154 "
+                "your own shortlists that does not improve still exports and reloads; on the Banking77 sample at the default "
+                "settings a result that is not *improved* stops the cell, because the recorded runs all improved. The cell "
+                "refuses to run if the pipeline holds the pinned base (Section 5 or 6 re-run after Section 7). 154 "
                 "shortlists from one seeded split of one corpus give no dispersion estimate; the deltas are sample-sanity "
                 "evidence that the adaptation contract works, not a benchmark, and a gain on Banking77 intent shortlists "
                 "says nothing about your reranking task until you measure it there. Another 132 s on CPU.\n\n"
                 "*Evaluation practice.* **Predict before running:** recall@5 on a six-entry shortlist — can it move at all?"
             ),
             "code": (
+                "if pipe.adapter is None:  # RR-M2: never score the pinned base as 'adapted'\n"
+                "    raise RuntimeError('The pipeline holds the pinned base, not an adapted model (Section 5 or 6 was re-run after Section 7 and put the base back): run Section 7, then this cell.')\n"
                 "adapted_test = pipe.evaluate(test_records, instruction=INSTRUCTION)\n"
                 "adapted_val = pipe.evaluate(val_records, instruction=INSTRUCTION)\n"
                 "comparison = {{\n"
@@ -435,6 +462,8 @@ TEMPLATE = {
                 "comparison['verdict'] = {{'adapted_vs_frozen_mrr': 'improved' if delta_mrr > 0 else ('no change' if delta_mrr == 0 else 'worse'), 'frozen_vs_random_floor_mrr': frozen_vs_floor}}\n"
                 "for metric, row in comparison.items():\n"
                 "    print({{metric: row}})\n"
+                "if not USE_BYOD and DEFAULT_SETTINGS and comparison['verdict']['adapted_vs_frozen_mrr'] != 'improved':\n"
+                "    raise RuntimeError(f\"On the Banking77 sample at the default settings the adapted MRR must be above the frozen MRR ({{adapted_test['mrr']:.4f}} vs {{frozen_test['mrr']:.4f}}): Run all again from the top; if it repeats, report it.\")\n"
                 "evaluation_report_payload = {{\n"
                 "    'model': {{'id': MODEL_ID, 'revision': MODEL_REVISION, 'key': MODEL_KEY}},\n"
                 "    'data_source': data_source,\n"
@@ -475,7 +504,8 @@ TEMPLATE = {
                 "the two models. The per-batch `evaluation_report` helper — the inference-stage helper — is written for "
                 "the first shortlist and stays `not-measurable`, because a batch of scores has no metric without "
                 "relevance labels; `pipe.evaluate` is that labelled evaluation.\n\n"
-                "`pipe.save_artifact` writes the trained tensors — the last two decoder layers, about 126 MB — as "
+                "`pipe.save_artifact` writes the trained tensors — the last two decoder layers, about 126 MB in float32 on CPU "
+                "and 63 MB in bfloat16 on CUDA (the cell prints the size) — as "
                 "`adapter.safetensors`, with a `manifest.json` recording the artifact format, the base model id and "
                 "revision, the digest of the base `model.safetensors`, the instruction it was trained with, the tensor "
                 "names, the file size and SHA-256, the training configuration and the epoch history (OUT8). "
@@ -487,6 +517,8 @@ TEMPLATE = {
             "code": (
                 "import csv\n"
                 "import shutil\n\n"
+                "if pipe.adapter is None:  # RR-M2: the export must be the model Section 8 evaluated\n"
+                "    raise RuntimeError('The pipeline holds the pinned base, not an adapted model (Section 5 or 6 was re-run after Section 7): run Section 7 and Section 8, then this cell.')\n"
                 "after = {{r['id']: ranked_shortlist(r) for r in probe_records}}\n"
                 "rows = []\n"
                 "for r in probe_records:\n"
@@ -550,7 +582,9 @@ TEMPLATE = {
         "The frozen reranker already puts the right intent phrase first for most unseen messages (recall@1 in the "
         "seventies against a lexical baseline that the hard negatives were chosen to defeat and a random floor of "
         "16.7 %), and a bounded listwise fine-tuning of the last two decoder layers on 231 shortlists lifts held-out "
-        "recall@1 by +4.5 points in a few minutes on CPU, with a 126 MB adapter that reloads to identical scores. "
+        "recall@1 by a few points (+4.5 in the float32 CPU build record, +3.2 on the recorded Kaggle Tesla T4 run in "
+        "bfloat16; Section 8 prints yours), with an adapter of about 126 MB in float32 (63 MB in bfloat16) that reloads to "
+        "identical scores. "
         "That is the claim: the adaptation contract can adapt the reranker to a relevance judgement end to end on a real "
         "labelled corpus, and the numbers it produces are read against a random floor, a lexical baseline and the frozen "
         "model rather than in isolation.\n\n"
@@ -574,11 +608,27 @@ TEMPLATE = {
         "independent split, and emit the shown machine-readable artifacts — without the repository being reachable. It "
         "does **not** establish benchmark superiority, ranking quality on any other task, a usable acceptance threshold, "
         "or production fitness.\n\n"
-        "**Optional experiments (they do not affect the default path):** set `TRAINABLE_LAYERS = 1` and watch the gain "
-        "shrink; set `TRAIN_CANDIDATES = 6` to train on the whole shortlist and compare; set `EPOCHS = 3` and watch "
-        "whether validation MRR keeps rising or turns (the best epoch is kept either way); change `INSTRUCTION` and re-read "
-        "the frozen numbers — the judgement is instruction-conditioned; or bring your own shortlists through BYOD and read "
-        "the lexical baseline before the adapted number.\n\n"
+        "## Activity: how much does the second trainable layer buy?\n\n"
+        "Run this only after the default Run all has finished; Section 9's exported files stay as they are unless you re-run Section 9.\n\n"
+        "1. **Predict.** Write down the held-out recall@1 you expect from the adapted reranker if only the **last one** decoder layer trains "
+        "(half the trainable parameters and half the adapter). Above or below the default's? By how much?\n"
+        "2. **Change.** In Section 7 set `TRAINABLE_LAYERS = 1`; leave every other field as it is.\n"
+        "3. **Run.** Run Section 7, then Section 8. Every adaptation starts from the pinned base (`started_from` in Section 7's output), "
+        "so this is a fresh experiment, not more training on top of the first run.\n"
+        "4. **Observe.** Section 7's epoch 0 (`note: frozen model`) must print the same validation metrics as in the default run — the same "
+        "starting point. Then read `delta_vs_frozen` in Section 8 and compare it with the default's.\n"
+        "5. **Explain.** Say in one sentence what the second layer added, and whether that is worth twice the adapter size for this task.\n\n"
+        "To put the notebook back to the recorded state, set `TRAINABLE_LAYERS = 2` and run Sections 7, 8 and 9 again.\n\n"
+        "<details><summary>Check your reasoning</summary>There is no recorded run of this setting, so there is no worked number to match. "
+        "The default itself moved held-out recall@1 by only +3.2 points on the Kaggle T4 run (+4.5 on CPU), because the frozen reranker already "
+        "puts the right intent first in about three of four shortlists; one layer has less capacity to reorder the rest, so a change no larger "
+        "than the default's — possibly none — is the reasonable expectation. On 154 shortlists from one seed a difference of a point or two is "
+        "within run-to-run noise: what you can conclude is the direction and the adapter-size trade-off, not a ranking of the two settings.</details>\n\n"
+        "**More experiments (same procedure, they do not affect the default path):** set `TRAIN_CANDIDATES = 6` to train on the whole shortlist "
+        "and compare; set `EPOCHS = 3` and watch whether validation MRR keeps rising or turns (the best epoch is kept either way); change "
+        "`INSTRUCTION` in Section 4 and re-run from Section 5 to re-read the frozen numbers — the judgement is instruction-conditioned; or bring "
+        "your own shortlists through BYOD (re-run from Section 4) and read the lexical baseline before the adapted number. On the Banking77 "
+        "sample with changed Section 7 settings, Section 8 reports the verdict instead of stopping.\n\n"
         '## Troubleshooting\n\n- **Section 1 stops with "This notebook needs a Linux x86_64 runtime"** — you are on Windows, macOS or an ARM machine. Use Google '
         'Colab, Kaggle or a Linux x86_64 Jupyter server.\n- **The uv wheel fails its size/SHA-256 check, or a download in Section 1 times out** — run Section 1 '
         'again; a complete environment built from the same lock is reused, an incomplete one is finished. If it repeats, the network is blocking or altering '
@@ -590,10 +640,17 @@ TEMPLATE = {
         '**Sections 6–8 are very slow** — a cross-encoder runs one forward pass per query–candidate pair (924 for the test split); on CPU that is minutes per '
         'evaluation. Switch to a T4 GPU.\n- **Your numbers differ slightly from the recorded run** — CUDA runs bfloat16 and CPU float32; the comparison between '
         'systems, not the last digit, is the result.\n- **BYOD: a column or record refusal** — the message names the rule: columns `id`, `query`, `positive`, '
-        '`negatives` (separated by ` | `), 1..15 distinct negatives per record, at least eight records; set `INSTRUCTION` to describe your relevance judgement.\n- '
+        '`negatives` (separated by ` | `), 1..15 distinct negatives per record; set `INSTRUCTION` to describe your relevance judgement.\n- '
+        '**BYOD: "the dataset has N distinct queries … 12..10002 distinct queries are required"** — the split keeps 20 % for test and 15 % for '
+        'validation and needs 8 for training, and each evaluated split is scored in one call of at most 2,000 records: add records, or split a larger '
+        'file into runs of at most 10,002 distinct queries.\n- '
         '**BYOD: "BYOD_PATH … is not a file"** — the path is relative to the working directory printed in the message; give one .csv, .json or .jsonl file.\n- '
         '**BYOD: "the upload dialog exists only in Google Colab"** — on Kaggle or Jupyter, put the file in the runtime and set `BYOD_PATH` to its path.\n- '
-        '**BYOD: "Upload exactly one file"** — the dialog was cancelled or several files were chosen; run the cell again.\n\n## Glossary\n\n- **Reranker / '
+        '**BYOD: "Upload exactly one file"** — the dialog was cancelled or several files were chosen; run the cell again.\n- **Section 8 or 9 says the '
+        'pipeline holds the pinned base** — you re-ran Section 5 or 6 after Section 7, and they put the pretrained weights back so their numbers are '
+        "the frozen model's. Run Section 7 again, then Section 8 and Section 9.\n- **Section 6 or 8 stops on the Banking77 sample** — the frozen "
+        'model did not beat the random floor, or the adapted model did not beat the frozen one at the default settings; neither happened in the '
+        'recorded runs. Run all again from the top; if it repeats, report it with the printed numbers.\n\n## Glossary\n\n- **Reranker / '
         'cross-encoder:** a model that reads the query and one candidate together and scores their relevance; accurate, but one forward pass per pair.\n- '
         '**Shortlist:** the small candidate list a first-stage retriever would hand the reranker; here the positive plus five negatives.\n- **Hard negatives:** '
         "wrong candidates chosen to look right (here, the highest word overlap with the message).\n- **Relevance score:** the `yes` share of the model's yes/no "
@@ -615,6 +672,6 @@ TEMPLATE = {
         "- Upstream code: https://github.com/QwenLM/Qwen3-Embedding\n"
         "- Qwen3 Embedding: Advancing Text Embedding and Reranking Through Foundation Models (2025): https://arxiv.org/abs/2506.05176\n"
         "- Efficient Intent Detection with Dual Sentence Encoders (Casanueva et al., 2020; Banking77, CC BY 4.0): https://arxiv.org/abs/2003.04807\n"
-        "- DIMER Notebook Specification 2.0 and Model Card Specification 1.1 (fleet specs in the ml-worker repository)"
+        "- DIMER Notebook Specification 2.2 and Model Card Specification 1.1 (fleet specs in the ml-worker repository)"
     ),
 }

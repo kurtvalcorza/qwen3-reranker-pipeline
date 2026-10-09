@@ -92,7 +92,10 @@ def test_swp_r_section_1_is_idempotent_and_keeps_the_live_worker(notebook, tmp_p
     lock_sha = re.search(r"^LOCK_SHA256 = '([0-9a-f]{64})'$", source, re.M).group(1)
     env = tmp_path / "env"
     (env / "bin").mkdir(parents=True)
-    (env / "bin" / "python").symlink_to(sys.executable)
+    try:
+        (env / "bin" / "python").symlink_to(sys.executable)
+    except OSError as exc:  # Windows without the symlink privilege (WinError 1314); the cell targets Linux runtimes
+        pytest.skip(f"cannot create a symlink here: {exc}")
     (env / ".dimer-lock-sha256").write_text(lock_sha + "\n", encoding="utf-8")
     monkeypatch.setenv("DIMER_ISOLATED_ENV", str(env))
     monkeypatch.delenv("DIMER_NOTEBOOK_CI_PREINSTALLED", raising=False)
@@ -164,7 +167,7 @@ def _m(r1: float, mrr: float) -> dict:
 def test_swp_a_section_6_records_frozen_vs_floor_and_keeps_the_contract_check(notebook):
     source = _cell(notebook, "frozen_vs_floor = ")
     snippet = source[source.index("# Contract integrity: both systems ranked the same shortlists.") :]
-    namespace = {"frozen_test": _m(0.1, 0.3), "baseline_lexical": _m(0.27, 0.46), "floor": _m(0.1667, 0.4083)}
+    namespace = {"frozen_test": _m(0.1, 0.3), "baseline_lexical": _m(0.27, 0.46), "floor": _m(0.1667, 0.4083), "USE_BYOD": True}
     exec(compile(snippet, "<section 6 verdict>", "exec"), namespace)
     assert namespace["frozen_vs_floor"] == "not above"
     namespace["baseline_lexical"] = {**_m(0.27, 0.46), "n_queries": 150}
@@ -178,7 +181,8 @@ def test_swp_a_section_8_records_the_verdict_and_writes_the_report(notebook, tmp
     monkeypatch.chdir(tmp_path)
     (tmp_path / "outputs").mkdir()
     namespace = {
-        "json": json, "pipe": types.SimpleNamespace(evaluate=lambda records, **kw: _m(0.75, adapted_mrr)), "test_records": [], "val_records": [],
+        "json": json, "pipe": types.SimpleNamespace(adapter={}, evaluate=lambda records, **kw: _m(0.75, adapted_mrr)), "test_records": [], "val_records": [],
+        "USE_BYOD": True, "DEFAULT_SETTINGS": True,
         "INSTRUCTION": "i", "floor": _m(0.1667, 0.4083), "baseline_lexical": _m(0.27, 0.46), "frozen_test": _m(0.73, 0.8429), "frozen_vs_floor": "above",
         "MODEL_ID": "m", "MODEL_REVISION": "r", "MODEL_KEY": "k", "data_source": "stand-in", "dataset_manifests": {"test": {"digest": "d", "candidates": 6}},
         "disjoint": {}, "adapt_result": {"history": [], "best_epoch": 0}, "adapt_seconds": 0.0,

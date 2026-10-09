@@ -3,7 +3,7 @@
 `tutorials/qwen3_reranker_colab.ipynb` (`E2E`, **standalone** carrier) is a **release candidate** until the
 exact notebook revision has executed top-to-bottom in a clean supported runtime. Unit tests, JSON validation,
 code-cell compilation, the generator parity checks and `tools/validate_release_assets.py` are necessary checks but
-are **not** runtime evidence under DIMER Notebook Specification 2.0 (REL8). This file is the durable release-gate
+are **not** runtime evidence under DIMER Notebook Specification 2.2 (REL8). This file is the durable release-gate
 record for the notebook.
 
 ## Automatic coverage (static, every pull request)
@@ -13,14 +13,14 @@ CI runs `tools/validate_release_assets.py`, which checks:
 - notebook JSON parses; every code cell compiles as plain Python (no `%`/`!` magics); no persisted outputs or
   execution counts; no unresolved placeholder markers; every code cell is preceded by an explanatory markdown cell;
 - exactly one tutorial notebook, named in `tutorials/README.md` with its `E2E` profile, the notebook-spec version
-  and the standalone carrier; `metadata.dimer` declares that profile, spec `2.0`, a §3.3 pedagogical mode,
+  and the standalone carrier; `metadata.dimer` declares that profile, spec `2.2`, a §3.3 pedagogical mode,
   `standalone: true` and `generated_from` (repository, revision, module SHA-256, generator);
 - the standalone carrier (ST1–ST8, PAR1–PAR4): no clone, repository install or repository import on the primary
   path; one cell per carried module (`pipeline.py`, `metrics.py`, `samples.py`), each equal to its source after the
   generator's documented rewrites; the inline `MANIFEST` equal to the committed 13-entry snapshot manifest and the
   inline `PINS` equal to the `pyproject.toml` runtime pins; the notebook byte-identical (on LF) to
-  `tools/build_notebook.py` output for its recorded revision; the pinned-install cell with its
-  restart-on-stale-import guard; `NOTEBOOK_SOURCE` recorded in exports;
+  `tools/build_notebook.py` output for its recorded revision; the single kernel cell that builds (or reuses) the
+  hash-locked uv environment and routes every later cell to it, with no in-kernel install and no restart request; `NOTEBOOK_SOURCE` recorded in exports;
 - `MODEL_ID`/`MODEL_REVISION` bound only in the carried module cell (and repeated in the inline manifest, which the
   notebook asserts against the module before fetching), the revision a 40-hex immutable commit, and the same
   identity string in `README.md`, `MODEL_CARD.md` and `docs/WEIGHTS.md` with no stray revisions (the pinned Banking77
@@ -80,10 +80,10 @@ Before changing the registry status from `Candidate` to `Release-grade`:
 4. verify that Section 1 reports `NOTEBOOK_SOURCE.repository_revision` equal to the revision recorded in
    `metadata.dimer.generated_from` and that the installed core package versions equal the inline `PINS`
    (= `pyproject.toml`): `torch==2.14.0`, `transformers==4.57.6`, `huggingface-hub==0.36.2`, `safetensors==0.8.0`,
-   `numpy==2.5.3` (an interpreter restart after the install is expected where the runtime's preinstalled torch or
-   numpy differ from the pins);
+   `numpy==2.5.3`, as built from `tutorials/requirements-colab.lock.txt` in the isolated environment (nothing is
+   installed into the kernel, and **no restart is allowed**: a run that needs one does not meet RUN10/ENV6);
 5. verify every default-path stage completes:
-   - pinned runtime installed from the inline `PINS` with no GitHub access;
+   - isolated runtime built from the hash lock (`--require-hashes --only-binary :all:`) with no GitHub access;
    - the three carried module cells execute (defining `Qwen3RerankerPipeline`, `verify_snapshot`,
      `stage_missing_files`, `validate_inputs`, `evaluation_report`, `format_pair`, `record_seed`, `rank_of_positive`,
      `ranking_metrics`, `random_floor`, `candidate_list`, `lexical_baseline`, `fetch_corpus`, `read_corpus`,
@@ -155,4 +155,16 @@ general estimates.
 
 ## Current status
 
-**Release-grade.** The `E2E` notebook blob `99efdc6a` (committed at `995cd8e`) executed top-to-bottom in a clean Kaggle Tesla T4 runtime on 2026-09-19 (11/11 ok (1 restart after install cell), 588.2 s, 30 files, 1209 MB fetched from the Hub and digest-verified inside the notebook) with no repository checkout — the REL1/REL10 supported-runtime evidence this file gates on. The local pre-flight rows above are what preceded it and remain history. Any later change to the carried modules or to the notebook produces a new blob, and the registry returns to **Candidate** until a clean run of that blob is recorded here.
+**Candidate.** The `E2E` notebook blob `99efdc6a` (committed at `995cd8e`) executed top-to-bottom in a clean Kaggle Tesla T4 runtime on 2026-09-19 (11/11 ok, 588.2 s, 30 files, 1209 MB fetched from the Hub and digest-verified inside the notebook) with no repository checkout, but it needed **one manual restart after the install cell** (pass 1 raised the stale-import guard after the in-kernel pip install). A restart-assisted run does not meet the no-restart gate (RUN10/ENV6), so that record is history, not release evidence; the earlier "Release-grade" label is withdrawn.
+
+### 2026-10-09 review fixes (RR-M1..M4, RR-m1..m6)
+
+The Notebook Review Framework v1 review of `f13a58e` (`docs/reviews/2026-10-02-notebook-review/`) found four Major and six Minor findings. On top of the cherry-picked fleet-sweep commit (`docs/reviews/2026-10-05-fleet-sweep/`), the notebook was regenerated by `tools/build_notebook.py` (/2.2) from `tools/notebook_template.py`:
+
+- **RR-M1:** Section 1 installs nothing into the kernel. It verifies a pinned `uv` 0.12.15 wheel, builds a managed CPython 3.12.12 environment from `tutorials/requirements-colab.lock.txt` (47 hash-locked packages, `--require-hashes --only-binary :all:`) and routes every later cell to a worker there; the `google.colab` stubs in that worker carry a `ModuleSpec` (`tests/test_worker_colab_stubs.py`). Linux x86_64 only.
+- **RR-M2:** `adapt()` and `load_artifact()` start from the pinned base (`restore_base`); Sections 5 and 6 put the base back before they measure; Sections 8 and 9 refuse to score or export the base as adapted.
+- **RR-M3:** `split_dataset` checks a BYOD file's size once and names it (12..10,002 distinct queries at the default fractions: 8 stay for training, one record per evaluated split, at most `MAX_EVAL_RECORDS` = 2,000 per evaluated split); validation and test are validated with a one-record floor; on BYOD the quality comparisons are verdicts, while the Banking77 sample at the default settings still stops on a failed comparison.
+- **RR-M4:** guided layer (from the sweep) plus one Predict → Change → Run → Observe → Explain activity (`TRAINABLE_LAYERS = 1`) and troubleshooting for the new refusals.
+- **RR-m1..m6:** device-labelled figures (CPU float32 build record vs Kaggle T4 bfloat16; adapter about 126 MB in float32, 63 MB in bfloat16); no `{{`/`}}` in markdown; the lexical baseline is described as weakened by construction and its below-random recall@3/@5 explained; `TRAIN_CANDIDATES_RANGE` (2..8) printed as the enforced ceiling and `MAX_TRAIN_CANDIDATES` as the default; NOTEBOOK_SPEC 2.2; `BYOD_PATH`.
+
+Local checks (pytest, Ruff, the validator and the generator `--check`) are not clean-runtime evidence. Status: **Candidate** until a one-pass hosted run of the new blob is recorded in this file.
