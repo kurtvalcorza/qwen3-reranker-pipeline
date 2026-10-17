@@ -123,7 +123,7 @@ def _section_8_namespace(adapter, adapted_mrr, use_byod, default_settings):
     return {
         "json": json, "pipe": types.SimpleNamespace(adapter=adapter, evaluate=lambda records, **kw: _m(0.75, adapted_mrr)), "test_records": [], "val_records": [],
         "INSTRUCTION": "i", "floor": _m(0.1667, 0.4083), "baseline_lexical": _m(0.27, 0.46), "frozen_test": _m(0.73, 0.8429), "frozen_vs_floor": "above",
-        "MODEL_ID": "m", "MODEL_REVISION": "r", "MODEL_KEY": "k", "data_source": "stand-in", "dataset_manifests": {"test": {"digest": "d", "candidates": 6}},
+        "MODEL_ID": "m", "MODEL_REVISION": "r", "MODEL_KEY": "k", "data_source": "stand-in", "dataset_manifests": {"train": {"digest": "t"}, "validation": {"digest": "v"}, "test": {"digest": "d", "candidates": 6}},
         "disjoint": {}, "adapt_result": {"history": [], "best_epoch": 0, "lr": 2e-5}, "adapt_seconds": 0.0,
         "USE_BYOD": use_byod, "DEFAULT_SETTINGS": default_settings,
         # T73-5: the score-once names Section 8 reads (no grid selection here, so these runs are exploratory)
@@ -134,13 +134,14 @@ def _section_8_namespace(adapter, adapted_mrr, use_byod, default_settings):
     }
 
 
-def test_rr_m3_section_8_holds_only_the_default_sample_run_to_an_improvement(notebook, tmp_path, monkeypatch):
+def test_rr_m3_section_8_records_the_exposed_verdict_and_never_stops_on_it(notebook, tmp_path, monkeypatch):
+    # Superseded by amendment 1 (F2): the exposed development test decides nothing, so a worse adapted MRR there is a
+    # recorded verdict on every path, including the default sample run.
     monkeypatch.chdir(tmp_path)
     (tmp_path / "outputs").mkdir()
     source = _cell(notebook, "delta_mrr = ")
-    with pytest.raises(RuntimeError, match="adapted MRR must be above the frozen MRR"):
-        exec(compile(source, "<section 8>", "exec"), _section_8_namespace({}, 0.8, False, True))
-    for use_byod, default_settings in ((True, True), (False, False)):
+    assert "adapted MRR must be above the frozen MRR" not in source
+    for use_byod, default_settings in ((False, True), (True, True)):
         namespace = _section_8_namespace({}, 0.8, use_byod, default_settings)
         exec(compile(source, "<section 8>", "exec"), namespace)
         assert namespace["comparison"]["verdict"]["adapted_vs_frozen_mrr"] == "worse"

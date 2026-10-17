@@ -162,31 +162,34 @@ def test_t73_5_adapter_mismatch_names_the_differing_keys():
     assert protocol.adapter_mismatch(None, run)
 
 
-def _metrics_stub(r1, mrr):
-    return {"recall@1": r1, "recall@3": r1, "recall@5": r1, "mrr": mrr, "median_rank": 1, "n_queries": 3, "ties_with_positive": 0, "tie_expected": {"recall@1": r1, "recall@3": r1, "recall@5": r1, "mrr": mrr}}
+def _metrics_stub(r1, mrr, ranks=(1, 2, 1)):
+    return {"recall@1": r1, "recall@3": r1, "recall@5": r1, "mrr": mrr, "median_rank": 1, "n_queries": 3, "ties_with_positive": 0, "tie_expected": {"recall@1": r1, "recall@3": r1, "recall@5": r1, "mrr": mrr}, "ranks": list(ranks)}
 
 
-def _section_8(notebook, tmp_path, **overrides):
+RUN = {"lr": 2e-5, "epochs": 2, "batch_size": 4, "trainable_layers": 2, "train_candidates": 4, "seed": 0, "best_epoch": 2, "n_train": 231, "instruction": samples.TASK_INSTRUCTION, "max_train_tokens": 192, "history": [], "trainable_names": []}
+
+
+def _section_8(notebook, tmp_path, run_overrides=None, exposed_adapted=(0.8, 0.88), **overrides):
     fresh = [{"id": f"fresh-{i:04d}", "query": f"q{i}", "positive": "p", "negatives": ["a", "b"]} for i in range(3)]
     calls = []
-    run = {"lr": 2e-5, "epochs": 2, "batch_size": 4, "trainable_layers": 2, "train_candidates": 4, "seed": 0, "best_epoch": 2, "n_train": 231, "history": [], "trainable_names": []}
+    run = {**RUN, **(run_overrides or {})}
 
     def evaluate(records, **kw):
         calls.append(("adapted", records))
-        return _metrics_stub(0.8, 0.88)
+        return _metrics_stub(*exposed_adapted) if records == ["dev"] else _metrics_stub(0.8, 0.88, (1, 1, 2))
 
     def evaluate_base(records, **kw):
         calls.append(("frozen", records))
         return _metrics_stub(0.7, 0.84)
 
-    pipe = types.SimpleNamespace(adapter=dict(run), evaluate=evaluate, evaluate_base=evaluate_base, lexical_baseline=lambda records: _metrics_stub(0.3, 0.5))
+    pipe = types.SimpleNamespace(adapter=dict(run), device="cuda:0", evaluate=evaluate, evaluate_base=evaluate_base, lexical_baseline=lambda records: _metrics_stub(0.3, 0.5))
     ns = {
         **{k: v for k, v in vars(protocol).items() if not k.startswith("__")},
-        "json": json, "os": os, "Path": Path, "random_floor": metrics.random_floor, "pipe": pipe,
+        "json": json, "os": os, "Path": Path, "random_floor": metrics.random_floor, "pipe": pipe, "paired_bootstrap": metrics.paired_bootstrap, "BOOTSTRAP_RESAMPLES": metrics.BOOTSTRAP_RESAMPLES, "BOOTSTRAP_SEED": metrics.BOOTSTRAP_SEED,
         "test_records": ["dev"], "val_records": ["val"], "fresh_test_records": fresh, "fresh_draw": {"digest": samples.FRESH_TEST_DIGEST},
         "INSTRUCTION": samples.TASK_INSTRUCTION, "floor": _metrics_stub(0.1667, 0.4083), "baseline_lexical": _metrics_stub(0.27, 0.46), "frozen_test": _metrics_stub(0.73, 0.84), "frozen_vs_floor": "above",
         "MODEL_ID": "m", "MODEL_REVISION": "r", "MODEL_KEY": "k", "data_source": "stand-in", "data_source_kind": "Banking77 sample",
-        "dataset_manifests": {"test": {"digest": "d", "candidates": 6}}, "disjoint": {}, "adapt_result": dict(run), "adapt_seconds": 0.0,
+        "dataset_manifests": {"train": {"digest": "t"}, "validation": {"digest": "v"}, "test": {"digest": "d", "candidates": 6}}, "disjoint": {}, "adapt_result": dict(run), "adapt_seconds": 0.0,
         "grid_selection": _selection(), "fingerprint": FINGERPRINT, "USE_BYOD": False, "DEFAULT_SETTINGS": True,
         "SPLIT_SEED": 42, "EPOCHS": 2, "BATCH_SIZE": 4, "TRAINABLE_LAYERS": 2, "TRAIN_CANDIDATES": 4, "ADAPT_SEED": 0, "RUN_GRID": True, "MAX_TRAIN_TOKENS": 192,
     }
@@ -210,11 +213,12 @@ def test_t73_5_section_8_scores_the_fresh_test_only_when_preregistered(notebook,
     assert (tmp_path / "outputs" / "qwen3_reranker_evaluation_report_reproduction_1.json").is_file()
 
 
-@pytest.mark.parametrize("override", [{"EPOCHS": 3}, {"BATCH_SIZE": 2}, {"ADAPT_SEED": 1}, {"data_source_kind": "BYOD"}, {"RUN_GRID": False}, {"grid_selection": None}])
-def test_t73_5_section_8_exploratory_runs_never_touch_the_fresh_test(notebook, tmp_path, monkeypatch, override):
+@pytest.mark.parametrize(("run_override", "override"), [({"epochs": 3}, {}), ({"batch_size": 2}, {}), ({"seed": 1}, {}), ({"lr": 5e-5}, {}), ({}, {"data_source_kind": "BYOD"}), ({}, {"RUN_GRID": False}), ({}, {"grid_selection": None})])
+def test_t73_5_section_8_exploratory_runs_never_touch_the_fresh_test(notebook, tmp_path, monkeypatch, run_override, override):
+    # F8: the training settings are read from the model in memory (pipe.adapter), not from the form fields.
     monkeypatch.chdir(tmp_path)
     (tmp_path / "outputs").mkdir()
-    ns, fresh_calls = _section_8(notebook, tmp_path, **override)
+    ns, fresh_calls = _section_8(notebook, tmp_path, run_overrides=run_override, **override)
     assert ns["test_look"] == "not scored (exploratory)" and fresh_calls == [] and ns["fresh_result"] is None
     assert not (tmp_path / "outputs" / "qwen3_reranker_evaluation_report.json").exists()
     assert (tmp_path / "outputs" / "qwen3_reranker_evaluation_report_exploratory_1.json").is_file()
@@ -227,7 +231,7 @@ def test_t73_5_section_8_masked_and_wrong_model_state(notebook, tmp_path, monkey
     ns, fresh_calls = _section_8(notebook, tmp_path)
     assert ns["test_look"].startswith("not scored (fresh test masked") and fresh_calls == []
     monkeypatch.delenv("DIMER_MASK_FRESH_TEST")
-    ns, fresh_calls = _section_8(notebook, tmp_path, adapt_result={"lr": 2e-5, "epochs": 2, "batch_size": 4, "trainable_layers": 2, "train_candidates": 4, "seed": 0, "best_epoch": 1, "n_train": 231, "history": []})
+    ns, fresh_calls = _section_8(notebook, tmp_path, adapt_result={**RUN, "best_epoch": 1})
     assert ns["test_look"] == "not scored (exploratory)" and fresh_calls == []
     assert any("model state" in d for d in ns["differing"])
 
@@ -239,6 +243,74 @@ def test_t73_5_frozen_kept_scores_only_the_frozen_model(notebook, tmp_path, monk
     selection = protocol.select_lr({1e-5: 0.880, 2e-5: 0.885, 5e-5: 0.884}, 0.881, fingerprint=FINGERPRINT)
     ns, fresh_calls = _section_8(notebook, tmp_path, grid_selection=selection)
     assert fresh_calls == ["frozen"] and ns["fresh_result"]["evaluated_system"] == "frozen"
+
+
+def test_t73_r2_f8_form_fields_do_not_decide_and_a_stale_fingerprint_fires(notebook, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("DIMER_MASK_FRESH_TEST", raising=False)
+    (tmp_path / "outputs").mkdir()
+    ns, fresh_calls = _section_8(notebook, tmp_path, EPOCHS=7, BATCH_SIZE=1)  # globals edited after training: irrelevant
+    assert ns["test_look"] == "pre-registered evaluation (this runtime)" and fresh_calls == ["frozen", "adapted"]
+    ns, fresh_calls = _section_8(notebook, tmp_path, dataset_manifests={"train": {"digest": "t"}, "validation": {"digest": "other"}, "test": {"digest": "d", "candidates": 6}})
+    assert any(d.startswith("grid selection") for d in ns["differing"]) and fresh_calls == []
+
+
+def test_t73_r2_f2_report_is_written_and_exposed_test_never_stops(notebook, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("DIMER_MASK_FRESH_TEST", raising=False)
+    (tmp_path / "outputs").mkdir()
+    source = _cell(notebook, "delta_mrr = ")
+    assert source.index("fresh_systems = ") < source.index("json.dump(evaluation_report_payload") and "raise RuntimeError" not in source[source.index("fresh_systems = "):]
+    ns, fresh_calls = _section_8(notebook, tmp_path, exposed_adapted=(0.6, 0.70))  # adapted worse than frozen on the exposed test
+    assert ns["comparison"]["verdict"]["adapted_vs_frozen_mrr"] == "worse" and fresh_calls == ["frozen", "adapted"]
+    report = json.loads((tmp_path / "outputs" / "qwen3_reranker_evaluation_report.json").read_text(encoding="utf-8"))
+    assert report["fresh_test"]["n_queries"] == 3 and report["fresh_test"]["bootstrap"]["n_boot"] == metrics.BOOTSTRAP_RESAMPLES
+
+
+def test_t73_r2_f7_device_and_dtype_are_recorded(notebook, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("DIMER_MASK_FRESH_TEST", raising=False)
+    (tmp_path / "outputs").mkdir()
+    ns, _ = _section_8(notebook, tmp_path)
+    assert ns["fresh_result"]["device"] == "cuda:0" and ns["fresh_result"]["dtype"] == "bfloat16"
+    assert ns["run_settings"]["dtype"] == "bfloat16" and "dtype" not in protocol.PREREGISTERED_SETTINGS
+
+
+def test_t73_r2_f6_retrain_check():
+    selection = {**_selection(), "runs": {2e-5: {"val_mrr": 0.9232}}}
+    history = [{"val": {"mrr": 0.88}}, {"val": {"mrr": 0.90}}, {"val": {"mrr": 0.9230}}]
+    ok = protocol.retrain_check(selection, {**RUN, "history": history})
+    assert ok["within"] and protocol.retrain_mismatch(ok) == []
+    history[2]["val"]["mrr"] = 0.905
+    bad = protocol.retrain_check(selection, {**RUN, "history": history})
+    assert not bad["within"] and "re-train" in protocol.retrain_mismatch(bad)[0]
+    assert protocol.retrain_check(None, RUN) is None
+
+
+def test_t73_r2_f5_paired_bootstrap_is_seeded_paired_and_gives_ci_verdicts():
+    frozen = [1] * 60 + [2] * 40
+    adapted = [1] * 90 + [2] * 10
+    a = metrics.paired_bootstrap({"frozen": frozen, "adapted": adapted}, n_boot=500, seed=7)
+    b = metrics.paired_bootstrap({"frozen": frozen, "adapted": adapted}, n_boot=500, seed=7)
+    assert a == b and a["difference"]["recall@1"]["point"] == pytest.approx(0.3)
+    lo, hi = a["difference"]["recall@1"]["ci95"]
+    assert 0 < lo <= 0.3 <= hi and a["difference"]["recall@1"]["verdict"] == "improved"
+    same = metrics.paired_bootstrap({"frozen": frozen, "adapted": list(frozen)}, n_boot=200, seed=7)
+    assert same["difference"]["mrr"]["ci95"] == [0.0, 0.0] and same["difference"]["mrr"]["verdict"] == "inconclusive"
+    assert metrics.ci_verdict([-0.2, -0.01]) == "worse"
+    only = metrics.paired_bootstrap({"frozen": frozen}, n_boot=50, seed=7)
+    assert "difference" not in only and only["systems"]["frozen"]["recall@1"]["point"] == pytest.approx(0.6)
+    with pytest.raises(ValueError):
+        metrics.paired_bootstrap({"frozen": frozen, "adapted": adapted[:5]}, n_boot=10)
+
+
+def test_t73_r2_prose_amendment_items(notebook):
+    md = _markdown(notebook)
+    assert "**paired bootstrap 95 % CI**" in md and "decides nothing — no stop reads a test split" in md
+    assert "is trained **again**" in md and "*keep the default unless clearly beaten*" in md
+    assert "10 / 385 fresh" in md and "about 11.5 minutes on a T4" in md and "75 minutes or more" in md
+    assert "give no dispersion estimate" not in md and "7–8 minutes" not in md
+    assert (ROOT / "docs" / "qwen3-reranker-preregistration-amendment-1.md").is_file()
 
 
 def test_t73_5_no_permanent_scored_once_wording(notebook):

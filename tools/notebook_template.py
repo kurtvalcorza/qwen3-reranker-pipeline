@@ -63,7 +63,7 @@ TEMPLATE = {
         "the pre-registered settings, reranks the same shortlists with the adapted model, exports the adapter as safetensors with "
         "a manifest, and reloads that artifact into a fresh pipeline to verify parity. The default path needs no "
         "repository clone, no DIMER worker or service, no credential, no upload dialog and no configuration edit "
-        "(NOTEBOOK_SPEC 2.5 §5). On CPU the whole path takes about an hour of model time after the downloads (on a T4 about twenty minutes) — "
+        "(NOTEBOOK_SPEC 2.5 §5). On CPU the whole path takes 75 minutes or more of model time after the downloads (on a T4 about 25 minutes) — "
         "a cross-encoder scores every query–candidate pair with a full forward pass, so evaluation dominates; a CUDA "
         "runtime is used automatically when present (bfloat16 there, float32 on CPU)."
     ),
@@ -83,8 +83,8 @@ TEMPLATE = {
             '**Who this notebook is for.** The intended audience is a learner who knows basic Python, has used Colab or Jupyter, and wants to see how a '
             'cross-encoder reranker orders a shortlist of candidate documents for a query, how ranking quality is measured against honest floors (a random '
             'floor and a lexical baseline, read under the same tie policy), and what a bounded listwise fine-tuning changes. No prior experience with Qwen3, rerankers '
-            'or ranking losses is assumed; terms are explained where they first matter and again in the **Glossary** at the end. CPU works but is slow (about '
-            'an hour of model time, because a cross-encoder runs one forward pass per pair); a GPU runtime is much faster.\n\n**Input → Model → Output.**\n\n| '
+            'or ranking losses is assumed; terms are explained where they first matter and again in the **Glossary** at the end. CPU works but is slow (75 minutes '
+            'or more of model time, because a cross-encoder runs one forward pass per pair); a GPU runtime is much faster.\n\n**Input → Model → Output.**\n\n| '
             '| Reranking | Bounded listwise fine-tuning |\n|---|---|---|\n| Input | (query, document) pairs with a one-line relevance instruction | Banking77 '
             'messages, each with its intent phrase and five shortlisted negatives (231 / 77 / 154 plus a 385-record fresh test, query-disjoint) |\n| Model | the Qwen3-Reranker-0.6B decoder, '
             'reading the `yes` / `no` logits at the last position | the same model; only the last two decoder layers train (31.5 M of 595.8 M parameters) with a '
@@ -211,7 +211,10 @@ TEMPLATE = {
                 "positions after those 2 per intent (5 per intent = 385), skipping messages already in a split, messages whose text "
                 "is in `train.csv` and near-duplicates (token Jaccard ≥ 0.8) of training and validation messages; `check_fresh_test` "
                 "refuses it unless its source ids and records match the pinned digests. Drawing it scores nothing: Section 8 scores "
-                "it only under the pre-registered settings. `validate_dataset` then checks every "
+                "it only under the pre-registered settings. A known property, not fixed (it would change every digest): when a message "
+                "shares no word with any other intent phrase, its three \"hard\" negatives fall back to sort order (`Refund not showing "
+                "up`, `activate my card`, `age limit`) — 7 / 231 training, 1 / 77 validation, 3 / 154 exposed and 10 / 385 fresh "
+                "shortlists, the same for every system. `validate_dataset` then checks every "
                 "record against the contract, `check_split_disjoint` asserts no message appears in two splits, and the "
                 "training split is written to `outputs/{stem}_train.csv` in the shape BYOD expects. A BYOD file is split by "
                 "`split_dataset`, which checks its size once and names it: 12..10,002 distinct queries at the default "
@@ -454,10 +457,11 @@ TEMPLATE = {
                 "*test* recall@1 was higher while validation MRR was tied, which is why the original test is now the exposed "
                 "development test. Now, with `RUN_GRID = True` (the default), the cell first trains one run per learning rate in "
                 "{{1e-5, 2e-5, 5e-5}} with every other setting fixed and reads each run's kept-epoch **validation** MRR; 2e-5 stays "
-                "unless another beats it by at least 0.010 (a practical tolerance on 77 validation queries, not a significance "
-                "threshold), and the selected run must beat the frozen model's validation MRR by 0.010 or the frozen model is kept "
-                "as the evaluated system (`docs/qwen3-reranker-preregistration.md`). Then the selected learning rate trains the "
-                "model that Sections 8 and 9 use. The grid adds three runs (about 7–8 minutes on a T4, about 30 on CPU). With "
+                "unless another beats it by at least 0.010 — a *keep the default unless clearly beaten* tolerance, at or below the "
+                "sampling noise of 77 validation queries by design, not a detection threshold — and the selected run must beat the frozen model's validation MRR by 0.010 or the frozen model is kept "
+                "as the evaluated system (`docs/qwen3-reranker-preregistration.md`). Then the selected learning rate is trained **again** "
+                "with the same seed: Sections 8 and 9 use this re-train, not the grid run, and Section 8 checks that its kept-epoch "
+                "validation MRR is within 0.010 of the grid run's. The grid adds three runs (about 11.5 minutes on a T4, about 40 on CPU). With "
                 "`RUN_GRID = False` the cell uses `LEARNING_RATE` and the run is exploratory. Any change to these fields makes the "
                 "run exploratory: Section 8 then reads validation and the exposed development test only, never the fresh test. "
                 "Every call starts from the pinned base (`started_from` in the printed result), so a re-run with other settings is a "
@@ -533,9 +537,13 @@ TEMPLATE = {
                 "several points and MRR up accordingly; the cell records whether the adapted MRR is above the frozen MRR as a "
                 "**verdict** (`improved`, `no change` or `worse`) in the report and `result.json` instead of asserting it, so a run on "
                 "your own shortlists that does not improve still exports and reloads; on the Banking77 sample at the default "
-                "settings (exposed development test) a result that is not *improved* stops the cell, because the recorded runs all "
-                "improved. The cell refuses to run if the pipeline holds the pinned base (Section 5 or 6 re-run after Section 7). "
-                "385 or 154 shortlists from one seeded split of one corpus give no dispersion estimate; the deltas are sample-sanity "
+                "settings the exposed-development verdict is printed and decides nothing — no stop reads a test split, and the "
+                "report is written right after the fresh test is scored. The cell refuses to run if the pipeline holds the pinned "
+                "base (Section 5 or 6 re-run after Section 7). The fresh-test block adds a **paired bootstrap 95 % CI** (10,000 "
+                "resamples of the 385 shortlists, seed 20261018) for each model and for adapted − frozen, and its verdict "
+                "(`improved` / `worse` / `inconclusive`) is read from that interval, with the point estimate beside it; the interval "
+                "covers only the choice of shortlists, not split-to-split or seed-to-seed variation. `device` and `dtype` are "
+                "recorded: the evaluation of record is the hosted T4 bfloat16 run, and CPU float32 numbers differ. The deltas are "
                 "evidence that the adaptation contract works, not a benchmark, and a gain on Banking77 intent shortlists "
                 "says nothing about your reranking task until you measure it there. About 2 minutes on CPU for the exposed "
                 "development test, and about 5 more per model for the fresh test.\n\n"
@@ -545,9 +553,14 @@ TEMPLATE = {
                 "if pipe.adapter is None:  # RR-M2: never score the pinned base as 'adapted'\n"
                 "    raise RuntimeError('The pipeline holds the pinned base, not an adapted model (Section 5 or 6 was re-run after Section 7 and put the base back): run Section 7, then this cell.')\n"
                 "# SCORE_ONCE_RULE: the fresh test is read only when every pre-registered setting holds and the model is the selected run.\n"
-                "model_state = adapter_mismatch(pipe.adapter, adapt_result)\n"
-                "run_settings = {{'data_source': data_source_kind, 'split_seed': SPLIT_SEED, 'fresh_test_digest': fresh_draw['digest'] if fresh_draw else None, 'instruction': INSTRUCTION, 'epochs': EPOCHS, 'batch_size': BATCH_SIZE, 'trainable_layers': TRAINABLE_LAYERS, 'train_candidates': TRAIN_CANDIDATES, 'adapt_seed': ADAPT_SEED, 'max_train_tokens': MAX_TRAIN_TOKENS, 'grid_run': RUN_GRID, 'lr': adapt_result['lr'] if adapt_result else None}}\n"
-                "differing = settings_differing(run_settings, grid_selection, fingerprint, model_state)\n"
+                "retrain = retrain_check(grid_selection, adapt_result)  # the fresh test scores a re-train of the selected lr (amendment 1, s4)\n"
+                "model_state = adapter_mismatch(pipe.adapter, adapt_result) + retrain_mismatch(retrain)\n"
+                "trained = adapter_settings(pipe.adapter)  # training settings from the model in memory, not the form fields (amendment 1, s5)\n"
+                "fingerprint_now = run_fingerprint(data_source=data_source_kind, split_seed=SPLIT_SEED, train_digest=dataset_manifests['train']['digest'], validation_digest=dataset_manifests['validation']['digest'], instruction=trained['instruction'], epochs=trained['epochs'], batch_size=trained['batch_size'], trainable_layers=trained['trainable_layers'], train_candidates=trained['train_candidates'], adapt_seed=trained['adapt_seed'])\n"
+                "device = str(getattr(pipe, 'device', 'cpu'))\n"
+                "dtype = 'bfloat16' if device.startswith('cuda') else 'float32'  # recorded, not pre-registered: the record is the T4 bfloat16 run (amendment 1, s3)\n"
+                "run_settings = {{'data_source': data_source_kind, 'split_seed': SPLIT_SEED, 'fresh_test_digest': fresh_draw['digest'] if fresh_draw else None, **trained, 'grid_run': RUN_GRID, 'device': device, 'dtype': dtype}}\n"
+                "differing = settings_differing(run_settings, grid_selection, fingerprint_now, model_state)\n"
                 "preregistered = not differing  # every fixed setting, the grid selection and the model state\n"
                 "FRESH_MASKED = os.environ.get('DIMER_MASK_FRESH_TEST') == '1'  # development checks only (SCORE_ONCE_RULE item 8)\n"
                 "test_look = look_at_test(differing, {{'test_look': globals().get('fresh_test_look')}}, masked=FRESH_MASKED)\n"
@@ -555,7 +568,7 @@ TEMPLATE = {
                 "def suffixed(path):\n"
                 "    p = Path(path)\n"
                 "    return str(p.with_name(p.stem + suffix + p.suffix))\n"
-                "print({{'test_look': test_look, 'settings_differing': differing, 'output_suffix': suffix or '(none)', 'evaluation_of_record': RECORDED_EVALUATION or 'none recorded yet: the first hosted pre-registered run will be (docs/release-verification.md)'}})\n"
+                "print({{'test_look': test_look, 'settings_differing': differing, 'output_suffix': suffix or '(none)', 'device': device, 'dtype': dtype, 'retrain_check': retrain, 'evaluation_of_record': RECORDED_EVALUATION or 'none recorded yet: the first hosted pre-registered run will be (docs/release-verification.md)'}})\n"
                 "if differing:\n"
                 "    print('This run is exploratory: it reads validation and the exposed development test only; the fresh test is not scored.')\n"
                 "adapted_test = pipe.evaluate(test_records, instruction=INSTRUCTION)\n"
@@ -584,13 +597,16 @@ TEMPLATE = {
                 "    fresh_systems = {{'random_floor': fresh_floor, 'lexical': fresh_lexical, 'frozen': fresh_frozen}}\n"
                 "    if grid_selection['adaptation_kept']:\n"
                 "        fresh_systems['adapted'] = pipe.evaluate(fresh_test_records, instruction=INSTRUCTION)\n"
-                "    fresh_result = {{'test_look': test_look, 'evaluated_system': grid_selection['evaluated_system'], 'n_queries': len(fresh_test_records), 'digest': fresh_draw['digest'], 'metrics': {{name: {{k: round(m[k], 4) for k in ('recall@1', 'recall@3', 'recall@5', 'mrr')}} for name, m in fresh_systems.items()}}, 'tie_expected': {{name: {{k: round(v, 4) for k, v in m['tie_expected'].items()}} for name, m in fresh_systems.items() if 'tie_expected' in m}}, 'ties_with_positive': {{name: m['ties_with_positive'] for name, m in fresh_systems.items() if 'ties_with_positive' in m}}}}\n"
+                "    fresh_result = {{'test_look': test_look, 'evaluated_system': grid_selection['evaluated_system'], 'n_queries': len(fresh_test_records), 'digest': fresh_draw['digest'], 'metrics': {{name: {{k: round(m[k], 4) for k in ('recall@1', 'recall@3', 'recall@5', 'mrr')}} for name, m in fresh_systems.items()}}, 'tie_expected': {{name: {{k: round(v, 4) for k, v in m['tie_expected'].items()}} for name, m in fresh_systems.items() if 'tie_expected' in m}}, 'ties_with_positive': {{name: m['ties_with_positive'] for name, m in fresh_systems.items() if 'ties_with_positive' in m}}, 'device': device, 'dtype': dtype}}\n"
+                "    fresh_result['bootstrap'] = paired_bootstrap({{name: m['ranks'] for name, m in fresh_systems.items() if 'ranks' in m}}, n_boot=BOOTSTRAP_RESAMPLES, seed=BOOTSTRAP_SEED)\n"
+                "    if 'difference' in fresh_result['bootstrap']:\n"
+                "        fresh_result['verdict'] = {{s: fresh_result['bootstrap']['difference'][s]['verdict'] for s in ('mrr', 'recall@1')}}\n"
                 "    fresh_test_look = test_look\n"
                 "    print({{'fresh_test': fresh_result}})\n"
                 "else:\n"
                 "    print({{'fresh_test': test_look}})\n"
-                "if not USE_BYOD and DEFAULT_SETTINGS and (grid_selection or {{}}).get('adaptation_kept', True) and comparison['verdict']['adapted_vs_frozen_mrr'] != 'improved':\n"
-                "    raise RuntimeError(f\"On the Banking77 sample at the default settings the adapted MRR must be above the frozen MRR ({{adapted_test['mrr']:.4f}} vs {{frozen_test['mrr']:.4f}}): Run all again from the top; if it repeats, report it.\")\n"
+                "# Amendment 1, s2: the exposed development test decides nothing, so its verdict is recorded, never a stop; the report\n"
+                "# (with the fresh-test block) is written next, and no stop after scoring can lose it.\n"
                 "evaluation_report_payload = {{\n"
                 "    'model': {{'id': MODEL_ID, 'revision': MODEL_REVISION, 'key': MODEL_KEY}},\n"
                 "    'data_source': data_source,\n"
@@ -602,6 +618,7 @@ TEMPLATE = {
                 "    'preregistered': preregistered,\n"
                 "    'settings_differing': differing,\n"
                 "    'settings': run_settings,\n"
+                "    'retrain_check': retrain,\n"
                 "    'grid_selection': grid_selection,\n"
                 "    'fresh_test': fresh_result,\n"
                 "    'exposed_development_test': {{'note': 'the original 154 test shortlists; they informed an earlier learning-rate choice', 'frozen': frozen_test, 'adapted': adapted_test}},\n"
@@ -619,7 +636,9 @@ TEMPLATE = {
                 "report_path = suffixed('outputs/{stem}_evaluation_report.json')\n"
                 "with open(report_path, 'w', encoding='utf-8') as f:\n"
                 "    json.dump(evaluation_report_payload, f, indent=2, ensure_ascii=False)\n"
-                "print({{'report': report_path}})"
+                "print({{'report': report_path}})\n"
+                "if comparison['verdict']['adapted_vs_frozen_mrr'] != 'improved':\n"
+                "    print({{'note': 'on the exposed development test the adapted MRR is not above the frozen MRR; this split decides nothing (amendment 1)'}})"
             ),
         },
         {
@@ -732,7 +751,7 @@ TEMPLATE = {
         "labelled corpus, and the numbers it produces are read against a random floor, a lexical baseline and the frozen "
         "model rather than in isolation, under one tie policy at a time.\n\n"
         "The fresh test is 385 six-entry shortlists (the exposed development test 154) from one seeded split of one corpus "
-        "with no dispersion estimate, and Banking77 may overlap the model's training data (see the introduction); "
+        "with a bootstrap interval over shortlists only (no estimate of split or seed variation), and Banking77 may overlap the model's training data (see the introduction); "
         "recall@k and MRR say whether the gold document is ordered first within a shortlist the dataset supplied, not how "
         "the model would rank a real candidate pool. The adapter changes the last layers, which every pair shares, so "
         "every score shifts and scores are not comparable across the frozen and adapted models; nothing here measures the "
@@ -794,9 +813,8 @@ TEMPLATE = {
         '**BYOD: "the upload dialog exists only in Google Colab"** — on Kaggle or Jupyter, put the file in the runtime and set `BYOD_PATH` to its path.\n- '
         '**BYOD: "Upload exactly one file"** — the dialog was cancelled or several files were chosen; run the cell again.\n- **Section 8 or 9 says the '
         'pipeline holds the pinned base** — you re-ran Section 5 or 6 after Section 7, and they put the pretrained weights back so their numbers are '
-        "the frozen model's. Run Section 7 again, then Section 8 and Section 9.\n- **Section 6 or 8 stops on the Banking77 sample** — the frozen "
-        'model did not beat the random floor, or the adapted model did not beat the frozen one at the default settings; neither happened in the '
-        'recorded runs. Run all again from the top; if it repeats, report it with the printed numbers.\n- **Section 8 says `not scored (exploratory)`** — a '
+        "the frozen model's. Run Section 7 again, then Section 8 and Section 9.\n- **Section 6 stops on the Banking77 sample** — the frozen "
+        'model did not beat the random floor; that did not happen in the recorded runs. Run all again from the top; if it repeats, report it with the printed numbers.\n- **Section 8 says `not scored (exploratory)`** — a '
         'setting differs from the pre-registration (`settings_differing` names it), or Section 4 was re-run after Section 7. Restore the defaults and run '
         'Sections 7 and 8 again; the exploratory files stay beside the pre-registered ones.\n- **Section 4 says the fresh test is not the pinned draw** — the '
         'corpus or the sampling code differs from the pinned one; Run all again from the top.\n\n## Glossary\n\n- **Reranker / '

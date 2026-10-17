@@ -15,11 +15,15 @@ from shared words.
 from __future__ import annotations
 
 import hashlib
+import random
 import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
 RECALL_AT = (1, 3, 5)
+# docs/qwen3-reranker-preregistration-amendment-1.md section 1: the fresh test's paired bootstrap.
+BOOTSTRAP_RESAMPLES = 10_000
+BOOTSTRAP_SEED = 20261018
 METRIC_DEFINITIONS = {
     "recall@k": (
         "fraction of queries whose positive document is ranked within the first k of the query's candidate "
@@ -109,7 +113,80 @@ def score_lists_metrics(score_lists: Sequence[Sequence[float]]) -> dict[str, Any
     result["tie_policy"] = "pessimistic (ties count against the positive); see tie_expected"
     result["tie_expected"] = expected_metrics(counts)
     result["ties_with_positive"] = sum(1 for _h, t in counts if t)
+    result["ranks"] = [h + t + 1 for h, t in counts]  # per-query pessimistic ranks, for the paired bootstrap
     return result
+
+
+def _interval(values: list[float]) -> list[float]:
+    ordered = sorted(values)
+    last = len(ordered) - 1
+    return [ordered[round(0.025 * last)], ordered[round(0.975 * last)]]
+
+
+def ci_verdict(ci: Sequence[float]) -> str:
+    """`improved` when the 95 % CI of a difference lies above 0, `worse` below 0, else `inconclusive`."""
+    if ci[0] > 0:
+        return "improved"
+    if ci[1] < 0:
+        return "worse"
+    return "inconclusive"
+
+
+def paired_bootstrap(
+    ranks_by_system: Mapping[str, Sequence[int]],
+    *,
+    n_boot: int = BOOTSTRAP_RESAMPLES,
+    seed: int = BOOTSTRAP_SEED,
+    pair: tuple[str, str] = ("adapted", "frozen"),
+) -> dict[str, Any]:
+    """Paired bootstrap 95 % CIs over queries: each resample draws query indices with replacement
+    (`random.Random` seeded by `seed`) and uses them for every system. Reports MRR and recall@1 per system
+    and, when both systems of `pair` are present, their difference with a CI-based verdict. The interval
+    covers the choice of queries only."""
+    names = list(ranks_by_system)
+    if not names:
+        raise ValueError("no systems to resample")
+    n = len(ranks_by_system[names[0]])
+    if n == 0 or any(len(ranks_by_system[k]) != n for k in names):
+        raise ValueError("every system needs the same non-zero number of per-query ranks")
+    rr = {k: [1.0 / r for r in ranks_by_system[k]] for k in names}
+    hit = {k: [1.0 if r == 1 else 0.0 for r in ranks_by_system[k]] for k in names}
+    paired = pair[0] in rr and pair[1] in rr
+    draws: dict[tuple[str, str], list[float]] = {(k, s): [] for k in names for s in ("mrr", "recall@1")}
+    diffs: dict[str, list[float]] = {"mrr": [], "recall@1": []}
+    rng = random.Random(seed)
+    for _ in range(n_boot):
+        idx = [rng.randrange(n) for _ in range(n)]
+        means = {}
+        for k in names:
+            means[(k, "mrr")] = sum(rr[k][i] for i in idx) / n
+            means[(k, "recall@1")] = sum(hit[k][i] for i in idx) / n
+            draws[(k, "mrr")].append(means[(k, "mrr")])
+            draws[(k, "recall@1")].append(means[(k, "recall@1")])
+        if paired:
+            for s in ("mrr", "recall@1"):
+                diffs[s].append(means[(pair[0], s)] - means[(pair[1], s)])
+    out: dict[str, Any] = {
+        "method": "paired bootstrap over queries (pessimistic ranks); percentile 95 % CI",
+        "n_boot": n_boot,
+        "seed": seed,
+        "n_queries": n,
+        "covers": "the choice of shortlists only, not split-to-split or seed-to-seed variation",
+        "systems": {
+            k: {
+                s: {"point": sum(src[k]) / n, "ci95": _interval(draws[(k, s)])}
+                for s, src in (("mrr", rr), ("recall@1", hit))
+            }
+            for k in names
+        },
+    }
+    if paired:
+        out["difference"] = {"pair": f"{pair[0]} - {pair[1]}"}
+        for s, src in (("mrr", rr), ("recall@1", hit)):
+            ci = _interval(diffs[s])
+            point = (sum(src[pair[0]]) - sum(src[pair[1]])) / n
+            out["difference"][s] = {"point": point, "ci95": ci, "verdict": ci_verdict(ci)}
+    return out
 
 
 def random_floor(list_sizes: Sequence[int]) -> dict[str, Any]:

@@ -43,10 +43,12 @@ TEST_LOOKS = (
     "not scored (exploratory)",
     "not scored (fresh test masked for a development check)",
 )
-# The evaluation of record: the first hosted T4 run with the pre-registered settings, copied here from
-# docs/release-verification.md once it exists (date, commit, notebook blob, runtime, fresh-test numbers). None until then;
-# the notebook prints it beside its own (this runtime) scoring and never uses it to change a setting.
+# The evaluation of record: the first hosted T4 (cuda, bfloat16) run with the pre-registered settings. It is set only by
+# the requote that follows that run; docs/release-verification.md names the run of record. A reproduction is defined by
+# identical pre-registered settings and module code except this constant (amendment 1, section 10). The notebook prints it
+# beside its own (this runtime) scoring and never uses it to change a setting.
 RECORDED_EVALUATION: dict[str, Any] | None = None
+RETRAIN_TOLERANCE = GRID_MARGIN  # amendment 1, section 4: re-train vs grid-run kept-epoch validation MRR
 # The pipeline's record (after `adapt`) must equal Section 7's selected run on these keys before the fresh test is read.
 _ADAPTER_KEYS = ("lr", "epochs", "batch_size", "trainable_layers", "train_candidates", "seed", "best_epoch", "n_train")
 MODEL_STATE_MISMATCH = "model state is not the selected adapted model"
@@ -130,6 +132,54 @@ def adapter_mismatch(adapter: Mapping[str, Any] | None, adapt_result: Mapping[st
         return [MODEL_STATE_MISMATCH + " (no adapter on the pipeline, or no Section 7 result)"]
     bad = [k for k in _ADAPTER_KEYS if adapter.get(k) != adapt_result.get(k)]
     return [f"{MODEL_STATE_MISMATCH} (differs in {bad})"] if bad else []
+
+
+def adapter_settings(adapter: Mapping[str, Any] | None) -> dict[str, Any]:
+    """The training settings the model in memory was trained with, read from its `adapter` record (amendment 1,
+    section 5), so the settings check does not rest on form globals."""
+    a = adapter or {}
+    return {
+        "instruction": a.get("instruction"),
+        "epochs": a.get("epochs"),
+        "batch_size": a.get("batch_size"),
+        "trainable_layers": a.get("trainable_layers"),
+        "train_candidates": a.get("train_candidates"),
+        "adapt_seed": a.get("seed"),
+        "max_train_tokens": a.get("max_train_tokens"),
+        "lr": a.get("lr"),
+    }
+
+
+def retrain_check(
+    selection: Mapping[str, Any] | None, adapt_result: Mapping[str, Any] | None, *, tolerance: float = RETRAIN_TOLERANCE
+) -> dict[str, Any] | None:
+    """The fresh test scores a re-train of the selected lr, not the grid run: compare their kept-epoch validation MRRs.
+    Returns None when there is nothing to compare (no grid, or the lr is not a grid value)."""
+    if not selection or not adapt_result or not selection.get("runs"):
+        return None
+    grid = selection["runs"].get(adapt_result.get("lr"))
+    history = adapt_result.get("history") or []
+    best = adapt_result.get("best_epoch")
+    if grid is None or best is None or best >= len(history) or not history[best].get("val"):
+        return None
+    retrain = float(history[best]["val"]["mrr"])
+    gap = abs(retrain - float(grid["val_mrr"]))
+    return {
+        "grid_val_mrr": round(float(grid["val_mrr"]), 6),
+        "retrain_val_mrr": round(retrain, 6),
+        "abs_difference": round(gap, 6),
+        "tolerance": tolerance,
+        "within": gap <= tolerance + 1e-12,
+    }
+
+
+def retrain_mismatch(check: Mapping[str, Any] | None) -> list[str]:
+    if check is None or check["within"]:
+        return []
+    return [
+        f"{MODEL_STATE_MISMATCH} (re-train kept-epoch validation MRR {check['retrain_val_mrr']:.4f} vs grid run "
+        f"{check['grid_val_mrr']:.4f}, beyond {check['tolerance']})"
+    ]
 
 
 def settings_differing(
