@@ -2,8 +2,11 @@
 
 Every query comes with a candidate list — its positive document and its negatives — and a scorer ranks the
 list; the rank of the positive gives **recall@1**, **recall@3**, **recall@5** (the positive is within the
-first *k*) and **MRR** (mean of 1 / rank). Ties are resolved pessimistically (a tied candidate counts as
-ranked above the positive). The **random floor** is what a uniformly random ordering of each query's list
+first *k*) and **MRR** (mean of 1 / rank). Every scorer is reported under two tie policies, side by
+side: **pessimistic** (a tied candidate counts as ranked above the positive; the headline numbers) and
+**expected** (`tie_expected`: the exact expectation over uniformly random orderings of the tied candidates,
+the convention of the random floor). `ties_with_positive` counts the lists where any negative ties the
+positive. The **random floor** is what a uniformly random ordering of each query's list
 achieves in expectation, averaged over the queries; the **lexical baseline** orders each list by the
 Jaccard overlap of lower-cased alphanumeric tokens with the query — what a system with no model gets
 from shared words.
@@ -23,6 +26,13 @@ METRIC_DEFINITIONS = {
         "list; ties count against the positive"
     ),
     "mrr": "mean over queries of 1 / rank of the positive document within its candidate list",
+    "tie_expected": (
+        "the same metrics as the exact expectation over uniformly random orderings of the candidates tied "
+        "with the positive (the random floor's convention); equal to the pessimistic values when nothing ties"
+    ),
+    "ties_with_positive": (
+        "number of candidate lists in which at least one negative scores exactly the positive's score"
+    ),
     "candidates": "each query's list is its positive followed by its negatives; lists may differ in length",
 }
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
@@ -69,6 +79,39 @@ def ranking_metrics(ranks: Sequence[int], list_sizes: Sequence[int]) -> dict[str
     return out
 
 
+def tie_counts(scores: Sequence[float], positive_index: int = 0) -> tuple[int, int]:
+    """(candidates scored strictly above the positive, candidates tied with it)."""
+    if not 0 <= positive_index < len(scores):
+        raise ValueError("positive_index is outside the candidate list")
+    target = float(scores[positive_index])
+    others = [float(s) for i, s in enumerate(scores) if i != positive_index]
+    return sum(1 for s in others if s > target), sum(1 for s in others if s == target)
+
+
+def expected_metrics(counts: Sequence[tuple[int, int]]) -> dict[str, float]:
+    """Exact expected recall@k and MRR when each positive's ties are broken uniformly at random."""
+    if not counts:
+        raise ValueError("no queries to score")
+    out = dict.fromkeys([f"recall@{k}" for k in RECALL_AT] + ["mrr"], 0.0)
+    for higher, tied in counts:
+        ranks = [higher + 1 + j for j in range(tied + 1)]
+        for k in RECALL_AT:
+            out[f"recall@{k}"] += sum(1 for r in ranks if r <= k) / len(ranks)
+        out["mrr"] += sum(1.0 / r for r in ranks) / len(ranks)
+    return {k: v / len(counts) for k, v in out.items()}
+
+
+def score_lists_metrics(score_lists: Sequence[Sequence[float]]) -> dict[str, Any]:
+    """Both tie policies for lists whose positive is at index 0: the pessimistic `ranking_metrics`, plus
+    `tie_expected` and `ties_with_positive`."""
+    counts = [tie_counts(scores, 0) for scores in score_lists]
+    result = ranking_metrics([h + t + 1 for h, t in counts], [len(s) for s in score_lists])
+    result["tie_policy"] = "pessimistic (ties count against the positive); see tie_expected"
+    result["tie_expected"] = expected_metrics(counts)
+    result["ties_with_positive"] = sum(1 for _h, t in counts if t)
+    return result
+
+
 def random_floor(list_sizes: Sequence[int]) -> dict[str, Any]:
     """Expected metrics of a uniformly random ordering of every query's candidate list."""
     if not list_sizes or any(not isinstance(n, int) or n < 2 for n in list_sizes):
@@ -99,12 +142,8 @@ def candidate_list(record: Mapping[str, Any]) -> list[str]:
 
 def lexical_baseline(records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     """Order every candidate list by Jaccard token overlap with the query — the no-model floor."""
-    ranks, sizes = [], []
-    for record in records:
-        candidates = candidate_list(record)
-        scores = [jaccard(record["query"], doc) for doc in candidates]
-        ranks.append(rank_of_positive(scores, 0))
-        sizes.append(len(candidates))
-    result = ranking_metrics(ranks, sizes)
+    result = score_lists_metrics(
+        [[jaccard(record["query"], doc) for doc in candidate_list(record)] for record in records]
+    )
     result["baseline"] = "Jaccard overlap of lower-cased alphanumeric tokens between query and candidate"
     return result

@@ -377,8 +377,10 @@ class Qwen3RerankerPipeline:
         self, records: Sequence[Mapping[str, Any]], *, instruction: str = DEFAULT_INSTRUCTION
     ) -> dict[str, Any]:
         """Rerank every record's candidate list (its positive followed by its negatives) with `rerank` and
-        read the rank of the positive: recall@1 / recall@3 / recall@5 and MRR, ties against the positive."""
-        from .metrics import candidate_list, rank_of_positive, ranking_metrics
+        read the rank of the positive: recall@1 / recall@3 / recall@5 and MRR with ties against the positive,
+        plus the same metrics with ties broken at random in expectation (`tie_expected`) and
+        `ties_with_positive`."""
+        from .metrics import candidate_list, score_lists_metrics
         from .samples import validate_dataset
 
         checked = validate_dataset(records, min_records=1, max_records=MAX_EVAL_RECORDS)["records"]
@@ -391,12 +393,12 @@ class Qwen3RerankerPipeline:
             sizes.append(len(candidates))
             pairs.extend((record["query"], doc) for doc in candidates)
         scores = self._score_pairs(pairs, instruction)
-        ranks = []
+        score_lists = []
         cursor = 0
         for size in sizes:
-            ranks.append(rank_of_positive(scores[cursor : cursor + size], 0))
+            score_lists.append(scores[cursor : cursor + size])
             cursor += size
-        metrics = ranking_metrics(ranks, sizes)
+        metrics = score_lists_metrics(score_lists)
         metrics.update(
             {
                 "instruction": instruction,
@@ -409,6 +411,28 @@ class Qwen3RerankerPipeline:
             }
         )
         return metrics
+
+    def evaluate_base(
+        self, records: Sequence[Mapping[str, Any]], *, instruction: str = DEFAULT_INSTRUCTION
+    ) -> dict[str, Any]:
+        """`evaluate` on the pinned base without losing the current adaptation: the adapted tensors are set
+        aside, the base is scored, and the adaptation (weights and `adapter` record) is put back."""
+        model, _ = self._require_model()
+        adapter = self.adapter
+        if adapter is None:
+            self.restore_base()
+            return self.evaluate(records, instruction=instruction)
+        state = model.state_dict()
+        kept = {k: state[k].detach().clone() for k in self._base_state}
+        self.restore_base()
+        try:
+            return self.evaluate(records, instruction=instruction)
+        finally:
+            merged = dict(model.state_dict())
+            merged.update(kept)
+            model.load_state_dict(merged, strict=True)
+            model.eval()
+            self.adapter = adapter
 
     @staticmethod
     def lexical_baseline(records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
