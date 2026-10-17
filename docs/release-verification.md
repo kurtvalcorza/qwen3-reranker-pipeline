@@ -3,7 +3,7 @@
 `tutorials/qwen3_reranker_colab.ipynb` (`E2E`, **standalone** carrier) is a **release candidate** until the
 exact notebook revision has executed top-to-bottom in a clean supported runtime. Unit tests, JSON validation,
 code-cell compilation, the generator parity checks and `tools/validate_release_assets.py` are necessary checks but
-are **not** runtime evidence under DIMER Notebook Specification 2.2 (REL8). This file is the durable release-gate
+are **not** runtime evidence under DIMER Notebook Specification 2.5 (REL8). This file is the durable release-gate
 record for the notebook.
 
 ## Automatic coverage (static, every pull request)
@@ -71,12 +71,13 @@ Before changing the registry status from `Candidate` to `Release-grade`:
 2. open that exact notebook revision in a new CPU or CUDA runtime (Colab, or a fresh-container executor above) with
    **no repository checkout**, an empty Hugging Face cache, and no pre-staged files under the working-directory
    snapshot `weights/qwen3-reranker-0.6b/` or the corpus cache `weights/banking77/` (the standalone path writes the
-   manifest itself, stages the missing file from the Hub, and fetches the two pinned Banking77 files from the project
-   repository, so neither directory may be seeded);
+   manifest itself, stages the missing file from the Hub, and fetches the two pinned Banking77 files from the
+   `PolyAI-LDN/task-specific-datasets` repository on GitHub, so neither directory may be seeded);
 3. run the notebook top-to-bottom without editing implementation cells (form parameters at their defaults:
    `USE_BYOD = False`, `SPLIT_SEED = 42`, `INSTRUCTION = 'Given a customer support message, judge whether the document
-   names the banking intent it expresses'`, `EPOCHS = 2`, `LEARNING_RATE = 2e-5`, `BATCH_SIZE = 4`,
-   `TRAINABLE_LAYERS = 2`, `TRAIN_CANDIDATES = 4`);
+   names the banking intent it expresses'`, `EPOCHS = 2`, `RUN_GRID = True`, `LEARNING_RATE = 2e-5` (used only without the grid), `BATCH_SIZE = 4`,
+   `TRAINABLE_LAYERS = 2`, `TRAIN_CANDIDATES = 4`, `ADAPT_SEED = 0`; the pre-registered settings of
+   `docs/qwen3-reranker-preregistration.md`);
 4. verify that Section 1 reports `NOTEBOOK_SOURCE.repository_revision` equal to the revision recorded in
    `metadata.dimer.generated_from` and that the installed core package versions equal the inline `PINS`
    (= `pyproject.toml`): `torch==2.14.0`, `transformers==4.57.6`, `huggingface-hub==0.36.2`, `safetensors==0.8.0`,
@@ -97,23 +98,27 @@ Before changing the registry status from `Candidate` to `Release-grade`:
    - Section 4: `fetch_corpus` fetching the two pinned files (839,073 / 239,961 bytes) from `raw.githubusercontent.com`
      into `weights/banking77/`, 10,003 + 3,080 raw rows read, and the seeded balanced draw of 231 / 77 / 154 records
      over 77 intents with six candidates per query, `check_split_disjoint` reporting no shared message, and the three
-     dataset digests `6a5c384c…` / `32cc0b97…` / `a67a92bd…`; `outputs/…_train.csv` written; the four dataset
+     dataset digests `6a5c384c…` / `32cc0b97…` / `a67a92bd…`; the fresh test drawn and checked (385 records, source-id SHA-256
+     `f59a5459…`, digest `9bc26a46…`, 2 + 4 skipped) but not scored; `outputs/…_train.csv` written; the four dataset
      refusal probes each raising `ValueError`;
    - Section 5: the ceilings (`MAX_PAIRS` 32, `MAX_TEXT_TOKENS` 8192, `MAX_TEXT_CHARS` 100000, `MAX_TRAIN_TOKENS`
      192, `MAX_TRAIN_CANDIDATES` 4) and the `yes`/`no` ids surfaced; `validate_inputs` writing
      `outputs/…_input_manifest.json` (verdict `accepted`, one recorded rejection finding from the empty-document
      probe); `rerank` on the first test shortlist with all five sanity checks `True` and the ranked shortlist printed
      with the gold marked, then three test shortlists ordered by the frozen model;
-   - Section 6: the random floor (recall@1 16.7 %, MRR ≈ 0.408), the lexical baseline (≈ 26.6 % recall@1 on the
-     sample — the hard negatives were chosen by overlap) and the frozen reranker's test metrics (≈ 73.4 %
+   - Section 6 (exposed development test): the random floor (recall@1 16.7 %, MRR ≈ 0.408), the lexical baseline
+     (26.6 % recall@1 pessimistic, 33.4 % with ties broken at random; 86 of 154 shortlists tie with the gold phrase)
+     and the frozen reranker's metrics (≈ 73.4 %
      recall@1, MRR ≈ 0.843, 924 pairs) on CPU float32, with the cell's assertion that the query counts agree
      and the frozen MRR is above the floor;
-   - Section 7: `pipe.adapt` printing epoch 0 as the frozen model, 31,461,888 trainable of 595,776,512 parameters,
+   - Section 7: the grid table (three runs on validation only) and `grid_selection`, then `pipe.adapt` printing epoch 0 as the frozen model, 31,461,888 trainable of 595,776,512 parameters,
      924 training pairs, and a two-epoch history with validation MRR rising (0.881 → 0.902 → 0.923 in the recorded run;
      `best_epoch` 2);
-   - Section 8: `pipe.evaluate` on the validation and test splits with the four-way comparison and
-     `outputs/…_evaluation_report.json` written (the cell asserts the adapted test MRR exceeds the frozen one — on the
-     sample recall@1 ≈ 77.9 % versus ≈ 73.4 %);
+   - Section 8: `test_look` = `pre-registered evaluation (this runtime)` with an empty `settings_differing`; the
+     fresh test scored for the random floor, the lexical baseline, the frozen model and the evaluated system (both tie
+     policies); `pipe.evaluate` on validation and the exposed development test with the four-way comparison, and
+     `outputs/…_evaluation_report.json` written (the cell stops if the adapted exposed-development MRR does not
+     exceed the frozen one at the default settings);
    - Section 9: the three test shortlists ordered again by the adapted reranker and printed beside the frozen order
      with the gold rank and score in each, the per-batch `evaluation_report` verdict `not-measurable`,
      `outputs/…_reranking.csv` written; `pipe.save_artifact` writing `outputs/…_adapter/{adapter.safetensors,
@@ -153,6 +158,49 @@ general estimates.
 | 2026-09-19 | `995cd8e` / `99efdc6a` | Kaggle Tesla T4 (`kurtvalcorza/dimer-nb2-qwen3-reranker` v3; image `torch 2.10.0+cu128` / `transformers 5.0.0` before the pinned install, `torch 2.14.0+cu130` / `transformers 4.57.6` after, Python 3.12.13, `cuda:0`) | Default sample path, `Run all` from a fresh interpreter with an empty Hugging Face cache and no repository checkout (blob SHA-1 verified against GitHub before execution) | 588.2 s | **PASSED** — 11/11 code cells ok (1 restart after install cell); 30 files, 1209 MB staged from the Hub into a clean cache; comparison {recall@1: {random_floor: 0.1667, lexical: 0.2662, frozen: 0.7338, adapted: 0.7662}, recall@3: {random_floor: 0.5, lexical: 0.4156, frozen: 0.9416, adapted: 0.9545}, recall@5: {random_floor: 0.8333, lexical: 0.7532, frozen: 0.9935, adapted: 0.9935}, mrr: {random_floor: 0.4083, lexical: 0.457, frozen: 0.8429, adapted: 0.8634}, median_rank: {lexical: 4, frozen: 1, adapted: 1}, delta_vs_frozen: {recall@1: 0.0325, recall@3: 0.013, recall@5: 0, mrr: 0.0206}}; reload parity {scores_identical: True, mrr_in_memory: 0.9125, mrr_reloaded: 0.9125}; run summary and executed notebook archived under `.agent/backups/kaggle-e2e-2026-09-19/out/dimer-nb2-qwen3-reranker/v3/evidence/` in the workspace |
 | 2026-09-19 | `d79994f` / `75fbc7d7` | Local pre-flight harness (Windows, CPython 3.12.10, CPU float32, `torch 2.14.0+cu130` with `CUDA_VISIBLE_DEVICES=-1`, `transformers 4.57.6`) | Default sample path (install skipped, pins pre-installed → three carried modules → inline manifest assert → `stage_missing_files` fetched 0 of 13 entries because the snapshot was pre-staged → `verify_snapshot` 13 files → `from_pretrained` on CPU with the `yes`/`no` ids checked → `fetch_corpus` served from the pre-staged cache after its digest checks → 10,003 + 3,080 rows read, 231 / 77 / 154 drawn over 77 intents with six candidates per query, `check_split_disjoint` clean and digests `6a5c384c…` / `32cc0b97…` / `a67a92bd…` → four dataset refusals → input manifest with the empty-document refusal → `rerank` on the first test shortlist (gold `extra charge on statement` scored 0.9697 and ranked first; 0.85 s, 95–98 tokens per pair) with all five sanity checks `True` → three shortlists ordered → random floor → lexical baseline → frozen evaluation → `adapt` → validation + test evaluation → orderings after adaptation → adapter export → reload parity) | 925.2 s | **PASSED** — 11/11 code cells; random floor recall@1 16.7 % / MRR 0.408; lexical baseline recall@1 26.6 %, recall@3 41.6 % (below the random floor: ties count against the positive and the hard negatives share its tokens), MRR 0.457, median rank 4; frozen test recall@1 73.4 %, recall@3 94.2 %, recall@5 99.4 %, MRR 0.843, median rank 1 (924 pairs, 131.7 s); `adapt` 31,461,888 of 595,776,512 params, 231 shortlists (924 training pairs), 2 epochs, 537.0 s incl. three 462-pair validation passes, validation MRR 0.881 → 0.902 → 0.923 (recall@1 79.2 → 83.1 → 85.7 %; `best_epoch` 2, train loss 0.799 → 0.669); **adapted test recall@1 77.9 %, recall@3 96.1 %, recall@5 99.4 %, MRR 0.873 (Δ +4.5 / +1.9 / 0.0 points, +0.030 MRR)** (129.2 s); the three probe shortlists kept the gold first before and after while the order below it changed and the gold scores moved (0.9697 → 0.9365, 0.2088 → 0.4085, 0.1343 → 0.0548); per-batch report `not-measurable`; adapter 125,850,032 B / 22 tensors, SHA-256 `9026a0ab…`; reload parity exact (probe scores identical, 20-shortlist validation MRR 0.975 both ways); six exports written. Pre-flight; hosted clean-runtime run still required |
 | 2026-09-14 | `0c652a2` / `a21e5a860c0f` (`TASK-INFERENCE`, superseded) | Kaggle T4 (`kurtvalcorza/dimer-nb2-qwen3-reranker` v2) | Default sample path of the inference-only notebook: one synthetic query with three candidates, `stage_missing_files` fetching `model.safetensors` from the Hub, `verify_snapshot` over 13 files, `rerank` with its sanity checks, `not-measurable` report, CSV + JSON exports | 236.4 s | **PASSED** — 8/8 code cells (1 restart after the install cell), 1,207 MB staged; history only |
+
+## Pre-registered fresh-test evaluation (2026-10-17)
+
+The row 73 tutorial review found that the default learning rate had been kept over 5e-5 on the 154 test shortlists
+(77.9 % against 76.0 % recall@1 in the `d79994f` CPU build record, validation MRR tied at 0.923). Those shortlists are
+now the **exposed development test**; `docs/qwen3-reranker-preregistration.md` (committed alone, before any run)
+fixes the grid, the fresh test, the tie policy and the scoring rules.
+
+- **Evaluation of record:** none yet. The first hosted T4 run of the regenerated notebook with the pre-registered
+  settings is THE evaluation; later identical hosted runs are reproductions. Record it here (date, commit, blob,
+  runtime, grid table, fresh-test numbers) and copy it into `protocol.RECORDED_EVALUATION`.
+- **Reproductions:** none yet.
+- **Development looks at the fresh test:** none. CPU checks run with `DIMER_MASK_FRESH_TEST=1` (SCORE_ONCE_RULE item 8).
+
+### CPU development check, fresh test masked (2026-10-18; build record, not release evidence)
+
+Commit `488c954` (code of this PR before the docs and regeneration commits), the package API driven in the notebook's
+default order on the build workstation (Windows, CPython 3.12, `torch 2.14.0` CPU wheel, float32,
+`CUDA_VISIBLE_DEVICES=-1`), pre-staged snapshot and corpus cache, 3,855 s. The fresh test was drawn and its pins and
+disjointness checked, and **not scored**: `test_look` = `not scored (fresh test masked for a development check)`,
+`settings_differing` = `[]`. Nothing in it changed a setting.
+
+| lr | val MRR by epoch (0 = frozen) | kept epoch | kept val MRR | seconds |
+|---|---|---|---|---|
+| 1e-5 | 0.8807 / 0.9002 / 0.9165 | 2 | 0.9165 | 1043 |
+| **2e-5** | 0.8807 / 0.9019 / 0.9232 | 2 | **0.9232** | 712 |
+| 5e-5 | 0.8807 / 0.9229 / 0.9080 | 1 | 0.9229 | 599 |
+
+Selection: **2e-5** ("no challenger beat 2e-05 by 0.01"); adaptation kept (0.9232 against frozen 0.8807, margin
+0.010). The final 2e-5 run reproduced the grid run (validation MRR 0.9232, recall@1 0.8571).
+
+Exposed development test (154 shortlists; old -> new for every number: the old column is the 2026-10-09 Colab T4
+bfloat16 run of blob `93f1a9d5`, the new one this CPU float32 check):
+
+| system | recall@1 | recall@3 | recall@5 | MRR | tie-expected recall@1 / MRR | ties_with_positive |
+|---|---|---|---|---|---|---|
+| random floor | 0.1667 -> 0.1667 | 0.5 -> 0.5 | 0.8333 -> 0.8333 | 0.4083 -> 0.4083 | (an expectation) | — |
+| lexical | 0.2662 -> 0.2662 | 0.4156 -> 0.4156 | 0.7532 -> 0.7532 | 0.457 -> 0.457 | — -> 0.3335 / 0.5301 | — -> 86 |
+| frozen | 0.7338 -> 0.7338 | — -> 0.9416 | — -> 0.9935 | 0.8429 -> 0.8429 | — -> 0.7338 / 0.8429 | — -> 0 |
+| adapted (2e-5) | 0.7662 -> 0.7792 | — -> 0.9610 | 0.9935 -> 0.9935 | 0.8634 -> 0.8725 | — -> 0.7792 / 0.8725 | — -> 0 |
+
+`evaluate_base` check: the base scored with `adapted: False` and the adapter kept afterwards (20-query validation MRR
+0.9125 base, 0.975 adapted). The fresh-test numbers belong to the first hosted pre-registered run.
 
 ## Current status
 
