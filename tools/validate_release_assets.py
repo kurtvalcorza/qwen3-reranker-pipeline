@@ -102,7 +102,7 @@ MARKDOWN_MARKERS = (
     "**lexical baseline**",
     "**relevance score, not a calibrated probability**",
     "**listwise**",
-    "no dispersion estimate",
+    "no estimate of split or seed variation",
     "scores are not comparable across the frozen and adapted models",
     "embedding or first-stage retrieval (see the sibling Qwen3 embedding pipeline), text generation or chat",
     "CC BY 4.0 (Casanueva et al., 2020)",
