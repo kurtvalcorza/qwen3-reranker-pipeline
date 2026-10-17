@@ -43,6 +43,10 @@ TEST_LOOKS = (
     "not scored (exploratory)",
     "not scored (fresh test masked for a development check)",
 )
+# The evaluation of record: the first hosted T4 run with the pre-registered settings, copied here from
+# docs/release-verification.md once it exists (date, commit, notebook blob, runtime, fresh-test numbers). None until then;
+# the notebook prints it beside its own (this runtime) scoring and never uses it to change a setting.
+RECORDED_EVALUATION: dict[str, Any] | None = None
 # The pipeline's record (after `adapt`) must equal Section 7's selected run on these keys before the fresh test is read.
 _ADAPTER_KEYS = ("lr", "epochs", "batch_size", "trainable_layers", "train_candidates", "seed", "best_epoch", "n_train")
 MODEL_STATE_MISMATCH = "model state is not the selected adapted model"
