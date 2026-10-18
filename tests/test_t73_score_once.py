@@ -71,7 +71,7 @@ def test_t73_3_notebook_prints_both_policies_and_names_ties(notebook):
     md = _markdown(notebook)
     assert "crowd its top three" not in md
     assert "86 of the 154 shortlists have a negative tied with the gold phrase" in md
-    assert "which bfloat16 on CUDA makes possible, so read that count for the model too" in md
+    assert "(the bfloat16 T4 run of 2026-10-18 had one such tie), so read that count for the model too" in md
 
 
 # --- T73-1 / T73-5: grid selection on validation ------------------------------------------------------------------
@@ -185,7 +185,7 @@ def _section_8(notebook, tmp_path, run_overrides=None, exposed_adapted=(0.8, 0.8
     pipe = types.SimpleNamespace(adapter=dict(run), device="cuda:0", evaluate=evaluate, evaluate_base=evaluate_base, lexical_baseline=lambda records: _metrics_stub(0.3, 0.5))
     ns = {
         **{k: v for k, v in vars(protocol).items() if not k.startswith("__")},
-        "json": json, "os": os, "Path": Path, "random_floor": metrics.random_floor, "pipe": pipe, "paired_bootstrap": metrics.paired_bootstrap, "BOOTSTRAP_RESAMPLES": metrics.BOOTSTRAP_RESAMPLES, "BOOTSTRAP_SEED": metrics.BOOTSTRAP_SEED,
+        "json": json, "os": os, "compute_dtype": __import__("qwen3_reranker_pipeline.pipeline", fromlist=["compute_dtype"]).compute_dtype, "Path": Path, "random_floor": metrics.random_floor, "pipe": pipe, "paired_bootstrap": metrics.paired_bootstrap, "BOOTSTRAP_RESAMPLES": metrics.BOOTSTRAP_RESAMPLES, "BOOTSTRAP_SEED": metrics.BOOTSTRAP_SEED,
         "test_records": ["dev"], "val_records": ["val"], "fresh_test_records": fresh, "fresh_draw": {"digest": samples.FRESH_TEST_DIGEST},
         "INSTRUCTION": samples.TASK_INSTRUCTION, "floor": _metrics_stub(0.1667, 0.4083), "baseline_lexical": _metrics_stub(0.27, 0.46), "frozen_test": _metrics_stub(0.73, 0.84), "frozen_vs_floor": "above",
         "MODEL_ID": "m", "MODEL_REVISION": "r", "MODEL_KEY": "k", "data_source": "stand-in", "data_source_kind": "Banking77 sample",
@@ -272,8 +272,8 @@ def test_t73_r2_f7_device_and_dtype_are_recorded(notebook, tmp_path, monkeypatch
     monkeypatch.delenv("DIMER_MASK_FRESH_TEST", raising=False)
     (tmp_path / "outputs").mkdir()
     ns, _ = _section_8(notebook, tmp_path)
-    assert ns["fresh_result"]["device"] == "cuda:0" and ns["fresh_result"]["dtype"] == "bfloat16"
-    assert ns["run_settings"]["dtype"] == "bfloat16" and "dtype" not in protocol.PREREGISTERED_SETTINGS
+    assert ns["fresh_result"]["device"] == "cuda:0" and ns["fresh_result"]["dtype"] == "float32"  # amendment 2
+    assert ns["run_settings"]["dtype"] == "float32" and "dtype" not in protocol.PREREGISTERED_SETTINGS
 
 
 def test_t73_r2_f6_retrain_check():

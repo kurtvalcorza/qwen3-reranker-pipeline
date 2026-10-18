@@ -65,7 +65,7 @@ TEMPLATE = {
         "repository clone, no DIMER worker or service, no credential, no upload dialog and no configuration edit "
         "(NOTEBOOK_SPEC 2.5 §5). On CPU the whole path takes 75 minutes or more of model time after the downloads (on a T4 about 25 minutes) — "
         "a cross-encoder scores every query–candidate pair with a full forward pass, so evaluation dominates; a CUDA "
-        "runtime is used automatically when present (bfloat16 there, float32 on CPU)."
+        "runtime is used automatically when present (float32 on every device; pre-registration amendment 2)."
     ),
     "byod": (
         "After the tutorial workflow completes, set `USE_BYOD = True` in Section 4 and re-run from that cell to supply your own "
@@ -89,7 +89,7 @@ TEMPLATE = {
             'messages, each with its intent phrase and five shortlisted negatives (231 / 77 / 154 plus a 385-record fresh test, query-disjoint) |\n| Model | the Qwen3-Reranker-0.6B decoder, '
             'reading the `yes` / `no` logits at the last position | the same model; only the last two decoder layers train (31.5 M of 595.8 M parameters) with a '
             'listwise cross-entropy |\n| Output | one relevance score per pair (the `yes` share — not a calibrated probability) and a ranking | recall@1/3/5 and MRR '
-            'beside a random floor, a lexical baseline and the frozen model, and a safetensors adapter (about 126 MB in float32 on CPU, 63 MB in bfloat16 on CUDA) that reloads with parity |\n\n**How to use this '
+            'beside a random floor, a lexical baseline and the frozen model, and a safetensors adapter (about 126 MB in float32 on every device) that reloads with parity |\n\n**How to use this '
             'notebook.** Choose a runtime (**Runtime → Change runtime type → T4 GPU** is strongly recommended), then **Runtime → Run all**. Run all completes in '
             "one pass: Section 1 installs nothing into the notebook's own Python, so no restart is needed. Sections 1–3 are **infrastructure** — the isolated "
             'environment, the carried package and the model snapshot — and their cells are collapsed; you may run them without studying them. The learning path '
@@ -97,7 +97,7 @@ TEMPLATE = {
             'principal result the notebook asks you to **Predict**; after it come **What to notice** and a collapsible **Check your reasoning** with a worked '
             "answer from the recorded run (the Colab T4 run of notebook blob `93f1a9d5` (commit `d064746`, 9 October 2026; `docs/execution-evidence/2026-10-09-d064746/`), bfloat16 on CUDA), which predates the fresh test: its numbers are on the 154 shortlists now called the "
             "**exposed development test**. Fresh-test numbers exist only after the first hosted run with the pre-registered settings (`docs/release-verification.md`). "
-            'CPU runs float32 and CUDA bfloat16, and the two differ by up to one or two points of recall@1 (77.9 % on CPU against 76.6 % on the T4 for the same adapted setting). Every adaptation starts from the pinned base, so re-running '
+            'This notebook now runs float32 on every device (amendment 2); the recorded T4 run trained in bfloat16, which differed from CPU float32 by up to one or two points of recall@1 (77.9 % on CPU against 76.6 % on the T4 for the same adapted setting). Every adaptation starts from the pinned base, so re-running '
             'Section 7 with other settings is a fresh, **exploratory** experiment (it never scores the fresh test); Sections 5 and 6 put the pinned base back before they measure, so their numbers are always the '
             "frozen model's, and after re-running them you re-run Section 7 before Sections 8 and 9 (those two cells refuse to treat the base as \"adapted\"). "
             '**Troubleshooting**, a **Glossary** and a **Conclusion** template are at the end. Writing your '
@@ -186,7 +186,7 @@ TEMPLATE = {
         "Banking77 intent shortlist stands in for your reranking task. The repository exposes none of these."
     ),
     "prerequisites": [
-        "- **Runtime:** a fresh supported runtime (Google Colab or Jupyter, Python 3.12). The default path runs on CPU and uses CUDA automatically when available. **Precision differs by device:** the pipeline runs float32 on CPU and bfloat16 on CUDA, so scores and the recorded metrics can differ between the two. CPU is adequate but not fast for a cross-encoder: the build record measured about 5 s to load and digest-verify the 1.19 GB snapshot, about 132 s to score the 154 test shortlists (924 pairs) and about 170 s per training epoch over 231 shortlists plus a validation pass per epoch. Building the isolated environment (the pinned `torch==2.14.0` among its packages; reused on a re-run) and the 1.19 GB checkpoint are the large downloads of the run.",
+        "- **Runtime:** a fresh supported runtime (Google Colab or Jupyter, Python 3.12). The default path runs on CPU and uses CUDA automatically when available. **Precision:** the pipeline loads, runs and trains the model in float32 on CPU and CUDA alike (pre-registration amendment 2); earlier recorded T4 runs used bfloat16 and are labelled so. CPU is adequate but not fast for a cross-encoder: the build record measured about 5 s to load and digest-verify the 1.19 GB snapshot, about 132 s to score the 154 test shortlists (924 pairs) and about 170 s per training epoch over 231 shortlists plus a validation pass per epoch. Building the isolated environment (the pinned `torch==2.14.0` among its packages; reused on a re-run) and the 1.19 GB checkpoint are the large downloads of the run.",
         "- **Knowledge:** basic Python; what a cross-encoder does and why it scores one pair per forward pass; what recall@k and mean reciprocal rank measure over a candidate list; what a listwise softmax loss does.",
         "- **Data contract:** records are `{id, query, positive, negatives}` — a query of 1..100,000 characters, a positive document of 1..1,000 characters and 1..15 distinct negative documents (the pair prompt is truncated longest-first to 8,192 tokens at inference and to 192 tokens **during training only**), ids matching `[A-Za-z0-9_.:-]{1,64}` and unique; a training set needs 8..20,000 records, and a BYOD dataset needs **12..10,002 distinct queries** (`split_size_bounds()`: 20 % go to test and 15 % to validation, each scored in one call of at most `MAX_EVAL_RECORDS` = 2,000 records, and at least 8 must stay for training); queries are de-duplicated case-insensitively before splitting so the same message never sits in two splits. BYOD accepts CSV (negatives separated by ` | `), JSON or JSONL in that shape.",
         "- **Validation is structural, not semantic:** nothing checks that a positive is relevant to its query, that the negatives are not, or that the instruction describes the judgement — a mislabelled record set is fine-tuned on without complaint.",
@@ -390,7 +390,7 @@ TEMPLATE = {
                 "0.8333) — a tie-handling artefact, not word overlap from the hard negatives. Broken at random like the floor "
                 "(`tie_expected`), the same baseline reaches recall@1 0.3335, recall@3 0.5640, recall@5 0.9118 and MRR 0.5301, "
                 "above the floor at every k. Both are printed side by side, for every system, with `ties_with_positive`; model "
-                "scores tie only when two are bit-identical, which bfloat16 on CUDA makes possible, so read that count for the "
+                "scores tie only when two are bit-identical (the bfloat16 T4 run of 2026-10-18 had one such tie), so read that count for the "
                 "model too. Beating the lexical baseline shows the reranker is not just counting words; it is not evidence of "
                 "skill on its own. "
                 "`pipe.evaluate` scores every query–candidate pair through `rerank` (`MAX_PAIRS` at a time), orders each "
@@ -543,7 +543,7 @@ TEMPLATE = {
                 "resamples of the 385 shortlists, seed 20261018) for each model and for adapted − frozen, and its verdict "
                 "(`improved` / `worse` / `inconclusive`) is read from that interval, with the point estimate beside it; the interval "
                 "covers only the choice of shortlists, not split-to-split or seed-to-seed variation. `device` and `dtype` are "
-                "recorded: the evaluation of record is the hosted T4 bfloat16 run, and CPU float32 numbers differ. The deltas are "
+                "recorded: the evaluation of record is the first hosted T4 run with float32 training (amendment 2). The deltas are "
                 "evidence that the adaptation contract works, not a benchmark, and a gain on Banking77 intent shortlists "
                 "says nothing about your reranking task until you measure it there. About 2 minutes on CPU for the exposed "
                 "development test, and about 5 more per model for the fresh test.\n\n"
@@ -558,7 +558,7 @@ TEMPLATE = {
                 "trained = adapter_settings(pipe.adapter)  # training settings from the model in memory, not the form fields (amendment 1, s5)\n"
                 "fingerprint_now = run_fingerprint(data_source=data_source_kind, split_seed=SPLIT_SEED, train_digest=dataset_manifests['train']['digest'], validation_digest=dataset_manifests['validation']['digest'], instruction=trained['instruction'], epochs=trained['epochs'], batch_size=trained['batch_size'], trainable_layers=trained['trainable_layers'], train_candidates=trained['train_candidates'], adapt_seed=trained['adapt_seed'])\n"
                 "device = str(getattr(pipe, 'device', 'cpu'))\n"
-                "dtype = 'bfloat16' if device.startswith('cuda') else 'float32'  # recorded, not pre-registered: the record is the T4 bfloat16 run (amendment 1, s3)\n"
+                "dtype = compute_dtype(device)  # float32 on every device (amendment 2); recorded, not pre-registered: the record is the T4 flloat16 run (amendment 1, s3)\n"
                 "run_settings = {{'data_source': data_source_kind, 'split_seed': SPLIT_SEED, 'fresh_test_digest': fresh_draw['digest'] if fresh_draw else None, **trained, 'grid_run': RUN_GRID, 'device': device, 'dtype': dtype}}\n"
                 "differing = settings_differing(run_settings, grid_selection, fingerprint_now, model_state)\n"
                 "preregistered = not differing  # every fixed setting, the grid selection and the model state\n"
@@ -660,8 +660,8 @@ TEMPLATE = {
                 "the two models. The per-batch `evaluation_report` helper — the inference-stage helper — is written for "
                 "the first shortlist and stays `not-measurable`, because a batch of scores has no metric without "
                 "relevance labels; `pipe.evaluate` is that labelled evaluation.\n\n"
-                "`pipe.save_artifact` writes the trained tensors — the last two decoder layers, about 126 MB in float32 on CPU "
-                "and 63 MB in bfloat16 on CUDA (the cell prints the size) — as "
+                "`pipe.save_artifact` writes the trained tensors — the last two decoder layers, about 126 MB in float32 on every "
+                "device (the cell prints the size) — as "
                 "`adapter.safetensors`, with a `manifest.json` recording the artifact format, the base model id and "
                 "revision, the digest of the base `model.safetensors`, the instruction it was trained with, the tensor "
                 "names, the file size and SHA-256, the training configuration and the epoch history (OUT8). "
@@ -722,7 +722,7 @@ TEMPLATE = {
                 "    'batch_report': single_report,\n"
                 "    'artifact': {{'dir': str(artifact_dir), 'sha256': artifact_manifest['files'][0]['sha256'], 'bytes': artifact_manifest['files'][0]['bytes'], 'tensors': len(artifact_manifest['tensors'])}},\n"
                 "    'reload_parity': parity,\n"
-                "    'runtime': {{'python': platform.python_version(), 'torch': torch.__version__, 'transformers': transformers.__version__, 'device': pipe.device, 'dtype': 'bfloat16' if pipe.device.startswith('cuda') else 'float32'}},\n"
+                "    'runtime': {{'python': platform.python_version(), 'torch': torch.__version__, 'transformers': transformers.__version__, 'device': pipe.device, 'dtype': compute_dtype(pipe.device)}},\n"
                 "}}\n"
                 "with open(suffixed('outputs/{stem}_result.json'), 'w', encoding='utf-8') as handle:\n"
                 "    json.dump(result_payload, handle, indent=2, ensure_ascii=False)\n"
@@ -745,7 +745,7 @@ TEMPLATE = {
         "last two decoder layers on 231 shortlists lifted recall@1 on the exposed development test by a few points (+3.2 in "
         "the Colab T4 run of notebook blob 93f1a9d5 (commit d064746, 9 October 2026; docs/execution-evidence/2026-10-09-d064746/), bfloat16; that split informed an earlier learning-rate choice, so read it as a "
         "development number). The fresh-test result of the pre-registered settings is Section 8's and "
-        "`docs/release-verification.md`'s, with an adapter of about 126 MB in float32 (63 MB in bfloat16) that reloads to "
+        "`docs/release-verification.md`'s, with an adapter of about 126 MB in float32 that reloads to "
         "identical scores. "
         "That is the claim: the adaptation contract can adapt the reranker to a relevance judgement end to end on a real "
         "labelled corpus, and the numbers it produces are read against a random floor, a lexical baseline and the frozen "
@@ -755,7 +755,7 @@ TEMPLATE = {
         "recall@k and MRR say whether the gold document is ordered first within a shortlist the dataset supplied, not how "
         "the model would rank a real candidate pool. The adapter changes the last layers, which every pair shares, so "
         "every score shifts and scores are not comparable across the frozen and adapted models; nothing here measures the "
-        "effect on other judgements. On CUDA the model runs in bfloat16 and CPU in float32; the two differ by up to one or two points "
+        "effect on other judgements. The model now runs in float32 on every device (amendment 2); the earlier bfloat16 T4 runs differed from CPU by up to one or two points "
         "of recall@1. A cross-encoder scores one pair per forward pass, so evaluation cost grows with the "
         "shortlist length — a first-stage retriever (the sibling embedding pipeline) is what makes the shortlist short.\n\n"
         "Three things to carry to real data. **Floors first:** the random floor and the lexical baseline on *your* "
@@ -803,7 +803,7 @@ TEMPLATE = {
         'names the file. Delete it from the snapshot folder Section 3 prints and run Section 3 again.\n- **Section 4 reports a size or SHA-256 mismatch for a '
         'Banking77 file** — the download from `raw.githubusercontent.com` was cut short or altered. Run Section 4 again; a verified cached file is reused.\n- '
         '**Sections 6–8 are very slow** — a cross-encoder runs one forward pass per query–candidate pair (924 for the test split); on CPU that is minutes per '
-        'evaluation. Switch to a T4 GPU.\n- **Your numbers differ slightly from the recorded run** — CUDA runs bfloat16 and CPU float32; the comparison between '
+        'evaluation. Switch to a T4 GPU.\n- **Your numbers differ slightly from the recorded run** — the 2026-10-09 record trained in bfloat16, this notebook in float32, and GPU and CPU kernels differ in low-order digits; the comparison between '
         'systems, not the last digit, is the result.\n- **BYOD: a column or record refusal** — the message names the rule: columns `id`, `query`, `positive`, '
         '`negatives` (separated by ` | `), 1..15 distinct negatives per record; set `INSTRUCTION` to describe your relevance judgement.\n- '
         '**BYOD: "the dataset has N distinct queries … 12..10002 distinct queries are required"** — the split keeps 20 % for test and 15 % for '

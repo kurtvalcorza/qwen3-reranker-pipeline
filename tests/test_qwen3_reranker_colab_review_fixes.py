@@ -128,7 +128,7 @@ def _section_8_namespace(adapter, adapted_mrr, use_byod, default_settings):
         "USE_BYOD": use_byod, "DEFAULT_SETTINGS": default_settings,
         # T73-5: the score-once names Section 8 reads (no grid selection here, so these runs are exploratory)
         **{k: v for k, v in vars(protocol).items() if not k.startswith("__")},
-        "os": os, "Path": Path, "random_floor": metrics.random_floor, "grid_selection": None, "fingerprint": None,
+        "os": os, "compute_dtype": __import__("qwen3_reranker_pipeline.pipeline", fromlist=["compute_dtype"]).compute_dtype, "Path": Path, "random_floor": metrics.random_floor, "grid_selection": None, "fingerprint": None,
         "fresh_draw": None, "fresh_test_records": None, "data_source_kind": "BYOD" if use_byod else "Banking77 sample",
         "SPLIT_SEED": 42, "EPOCHS": 2, "BATCH_SIZE": 4, "TRAINABLE_LAYERS": 2, "TRAIN_CANDIDATES": 4, "ADAPT_SEED": 0, "RUN_GRID": True,
     }
@@ -245,9 +245,9 @@ def test_rr_m1_quoted_figures_name_their_device(notebook):
     # T73-4 (REL13): worked answers name the hosted run of blob 93f1a9d5; the device gap is stated as 1-2 points.
     assert "Kaggle Tesla T4 run of 19 September 2026" not in md and "differ in the last digits" not in md
     assert "the Colab T4 run of notebook blob `93f1a9d5` (commit `d064746`, 9 October 2026" in md
-    assert "differ by up to one or two points of recall@1" in md
+    assert "by up to one or two points of recall@1" in md
     assert "held-out recall@1" not in md and "the default keeps 2e-5" not in md
-    assert "about 126 MB in float32 on CPU" in md and "63 MB in bfloat16 on CUDA" in md
+    assert "about 126 MB in float32 on every device" in md and "63 MB in bfloat16" not in md  # amendment 2
 
 
 def test_rr_m2_minor_no_template_escapes_in_markdown(notebook):

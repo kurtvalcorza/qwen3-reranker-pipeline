@@ -41,6 +41,10 @@ WEIGHT_SHA256 = (
 PARAMETER_COUNT = 595_776_512  # Qwen3ForCausalLM with the output projection tied to the token embeddings
 DECODER_LAYERS = 28  # config.json num_hidden_layers
 DEFAULT_TRAINABLE_LAYERS = 2  # the last two decoder layers (31,461,888 parameters)
+# Amendment 2 (2026-10-18): the whole model runs and trains in float32 on every device; a T4 has no bfloat16
+# tensor-core path, and AdamW on bfloat16 parameters (no float32 master copy) rounded small updates away.
+COMPUTE_DTYPE = "float32"
+ADAPTER_DTYPE = "float32"
 MAX_TRAIN_TOKENS = 192  # training-only prompt ceiling (inference truncates the pair to MAX_TEXT_TOKENS)
 MAX_TRAIN_CANDIDATES = 4  # the DEFAULT list length per query (positive + first negatives); not a ceiling
 TRAIN_CANDIDATES_RANGE = (2, 8)  # what adapt() accepts for train_candidates: the enforced bounds
@@ -244,6 +248,39 @@ def evaluation_report(
     }
 
 
+def compute_dtype(device: str) -> str:
+    """The dtype the model is loaded, run and trained in on `device`: float32 everywhere (amendment 2)."""
+    if not isinstance(device, str) or not device:
+        raise ValueError("device must be a non-empty string such as 'cpu' or 'cuda:0'")
+    return COMPUTE_DTYPE
+
+
+def check_float32_training(params: Sequence[Any], optimiser: Any | None = None) -> dict[str, str]:
+    """Refuse trainable parameters (and, after a step, AdamW state) that are not float32 (amendment 2)."""
+    import torch
+
+    bad = sorted({str(p.dtype) for p in params if p.dtype != torch.float32})
+    if bad:
+        raise RuntimeError(f"trainable parameters must be float32 (amendment 2), found {bad}")
+    if optimiser is not None:
+        state_bad = sorted(
+            {
+                str(v.dtype)
+                for state in optimiser.state.values()
+                for k, v in state.items()
+                if k != "step" and hasattr(v, "dtype") and v.dtype != torch.float32
+            }
+        )
+        if state_bad:
+            raise RuntimeError(f"optimiser state must be float32 (amendment 2), found {state_bad}")
+    return {
+        "weights": COMPUTE_DTYPE,
+        "trainable": "float32",
+        "optimizer_state": "float32",
+        "forward": COMPUTE_DTYPE,
+    }
+
+
 def _remember_base(base: dict[str, Any], model: Any, names: Sequence[str]) -> None:
     """Keep a copy of each named tensor's pinned-base value the first time it is about to change."""
     state = model.state_dict()
@@ -296,7 +333,7 @@ class Qwen3RerankerPipeline:
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
         resolved_device = device or ("cuda:0" if torch.cuda.is_available() else "cpu")
-        dtype = torch.bfloat16 if resolved_device.startswith("cuda") else torch.float32
+        dtype = getattr(torch, compute_dtype(resolved_device))
         tokenizer = AutoTokenizer.from_pretrained(
             source, padding_side="left", trust_remote_code=False, **kwargs
         )
@@ -508,6 +545,7 @@ class Qwen3RerankerPipeline:
             param.requires_grad_(name in wanted)
         params = [p for p in model.parameters() if p.requires_grad]
         n_trainable = sum(p.numel() for p in params)
+        precision = check_float32_training(params)
         optimiser = torch.optim.AdamW(params, lr=lr, weight_decay=0.01)
         device = torch.device(self.device)
         prefix_ids = tokenizer.encode(PREFIX, add_special_tokens=False)
@@ -571,6 +609,8 @@ class Qwen3RerankerPipeline:
                     loss.backward()
                     torch.nn.utils.clip_grad_norm_(params, 1.0)
                     optimiser.step()
+                    if epoch == 1 and start == 0:
+                        check_float32_training(params, optimiser)
                     losses.append(float(loss.detach()))
                 model.eval()
                 entry = {"epoch": epoch, "train_loss": sum(losses) / max(len(losses), 1), "val": score_val()}
@@ -618,6 +658,8 @@ class Qwen3RerankerPipeline:
             "n_train_pairs": sum(len(lst) for lst in lists),
             "n_val": len(val_checked),
             "seed": seed,
+            "device": str(self.device),
+            "precision": precision,
             "started_from": "pinned base"
             + (f" (restored {len(restored)} tensors an earlier run changed)" if restored else ""),
             "history": history,
@@ -650,6 +692,9 @@ class Qwen3RerankerPipeline:
         out.mkdir(parents=True, exist_ok=True)
         names = set(self.adapter["trainable_names"])
         tensors = {k: v.detach().cpu().contiguous() for k, v in model.state_dict().items() if k in names}
+        wrong = sorted({str(v.dtype) for v in tensors.values() if str(v.dtype) != f"torch.{ADAPTER_DTYPE}"})
+        if wrong:
+            raise RuntimeError(f"adapter tensors must be {ADAPTER_DTYPE} (amendment 2), found {wrong}")
         weights_path = out / ARTIFACT_WEIGHTS_NAME
         save_file(tensors, str(weights_path), metadata={"format": "pt"})
         manifest = {
@@ -740,6 +785,9 @@ class Qwen3RerankerPipeline:
         tensors = load_file(str(weights_path))
         if sorted(tensors) != expected:
             raise ValueError("artifact tensor names differ from its manifest")
+        wrong = sorted({str(v.dtype) for v in tensors.values() if str(v.dtype) != f"torch.{ADAPTER_DTYPE}"})
+        if wrong:
+            raise ValueError(f"artifact tensors must be {ADAPTER_DTYPE} (amendment 2), found {wrong}")
         self.restore_base()
         _remember_base(self._base_state, model, sorted(tensors))
         state = model.state_dict()

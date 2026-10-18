@@ -188,7 +188,7 @@ def test_swp_a_section_8_records_the_verdict_and_writes_the_report(notebook, tmp
         "MODEL_ID": "m", "MODEL_REVISION": "r", "MODEL_KEY": "k", "data_source": "stand-in", "dataset_manifests": {"train": {"digest": "t"}, "validation": {"digest": "v"}, "test": {"digest": "d", "candidates": 6}},
         "disjoint": {}, "adapt_result": {"history": [], "best_epoch": 0, "lr": 2e-5}, "adapt_seconds": 0.0,
         **{k: v for k, v in vars(protocol).items() if not k.startswith("__")},
-        "os": __import__("os"), "Path": Path, "random_floor": metrics.random_floor, "grid_selection": None, "fingerprint": None,
+        "os": __import__("os"), "compute_dtype": __import__("qwen3_reranker_pipeline.pipeline", fromlist=["compute_dtype"]).compute_dtype, "Path": Path, "random_floor": metrics.random_floor, "grid_selection": None, "fingerprint": None,
         "fresh_draw": None, "fresh_test_records": None, "data_source_kind": "BYOD",
         "SPLIT_SEED": 42, "EPOCHS": 2, "BATCH_SIZE": 4, "TRAINABLE_LAYERS": 2, "TRAIN_CANDIDATES": 4, "ADAPT_SEED": 0, "RUN_GRID": True,
     }
