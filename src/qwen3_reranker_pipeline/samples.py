@@ -1,15 +1,21 @@
 """Query / positive / negatives dataset contract for reranker fine-tuning: the pinned Banking77 sample,
 validation, seeded splitting, BYOD loaders and CSV export.
 
-The default dataset is **real** and a reranking task the model was not tuned for: Banking77 (Casanueva et
-al., 2020; CC BY 4.0), 13,083 customer-support messages labelled with 77 fine-grained banking intents. Two
+The default dataset is **real**: Banking77 (Casanueva et al., 2020; CC BY 4.0), 13,083 customer-support
+messages labelled with 77 fine-grained banking intents. It has been public since 2020 and is an MTEB task
+(Banking77Classification); the Qwen3 Embedding report (arXiv 2506.05176) names MS MARCO, NQ, HotpotQA and
+synthetic classification pairs among its supervised data but does not list the reranker's training sets or
+any decontamination, so overlap with the model's training data cannot be ruled out (DAT9). Two
 CSV files (`train.csv`, `test.csv`) are fetched from the PolyAI `task-specific-datasets` repository at a
 pinned commit and refused on any byte-size or SHA-256 mismatch. Every intent name becomes a short
 **document** (`card_arrival` → `card arrival`); each message is a **query** whose positive document is its
 intent phrase, and its **negatives** are a seeded shortlist of other intent phrases — the hardest few by
 token overlap with the message plus random ones — so reranking the shortlist is intent detection over a
 candidate list. Training and validation queries are drawn from `train.csv`, test queries from `test.csv` —
-the release's own partition — balanced over the 77 intents.
+the release's own partition — balanced over the 77 intents. A **fresh test** (`build_fresh_test`) is drawn
+from the same seeded per-intent shuffle of `test.csv` at the positions after the original test draw, skipping
+messages already in a split, messages whose normalised text is in `train.csv` and near-duplicates (token
+Jaccard >= 0.8) of the training and validation messages; its source ids and records are pinned by digest.
 
 A record is ``{id, query, positive, negatives}``; its candidate list is the positive then the negatives.
 """
@@ -57,6 +63,12 @@ MIN_RECORDS = 8
 MAX_RECORDS = 20_000
 MAX_DOCUMENT_CHARS = 1_000
 _ID_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
+_NORM_RE = re.compile(r"[a-z0-9]+")
+# The fresh test (docs/qwen3-reranker-preregistration.md): 5 per intent = 385 shortlists, never scored before.
+FRESH_TEST_PER_INTENT = 5
+FRESH_NEAR_DUPLICATE_JACCARD = 0.8
+FRESH_TEST_SOURCE_IDS_SHA256 = "f59a545993d3fe007650c050ea2384ae58e53c995f60bf6f8faeda10ca7cf9e7"
+FRESH_TEST_DIGEST = "9bc26a46688c0c0ac821abf1ba157d96e7a4d0294b142fdb2d5266caf9e3aaf6"
 
 
 def _sha256_bytes(data: bytes) -> str:
@@ -69,7 +81,8 @@ def intent_phrase(intent: str) -> str:
 
 
 def fetch_corpus(*, cache_dir: str | Path | None = None, fetcher: Any = None) -> dict[str, bytes]:
-    """Return the two pinned Banking77 CSVs (bytes) from the cache or the project repository, verified."""
+    """Return the two pinned Banking77 CSVs (bytes) from the cache or the pinned
+    PolyAI-LDN/task-specific-datasets commit on GitHub (raw.githubusercontent.com), verified."""
     cache = Path(cache_dir) if cache_dir is not None else DEFAULT_CACHE_DIR
     cache.mkdir(parents=True, exist_ok=True)
     out = {}
@@ -149,6 +162,32 @@ def sample_negatives(
     return hard + rest[: n_negatives - len(hard)]
 
 
+def _intent_pools(
+    corpus: Mapping[str, Sequence[Mapping[str, Any]]], rng: random.Random
+) -> tuple[list[str], dict[str, dict[str, list[dict[str, Any]]]]]:
+    """The de-duplicated records of each member grouped by intent, each group shuffled by `rng`
+    (train first)."""
+    pools = {"train": filter_records(corpus["train"]), "test": filter_records(corpus["test"])}
+    intents = sorted({r["intent"] for r in pools["train"]})
+    by_intent = {
+        split: {intent: [r for r in pool if r["intent"] == intent] for intent in intents}
+        for split, pool in pools.items()
+    }
+    for split in by_intent.values():
+        for records in split.values():
+            rng.shuffle(records)
+    return intents, by_intent
+
+
+def normalise(text: str) -> str:
+    """Lower-cased alphanumeric tokens joined by one space (the fresh test's duplicate key)."""
+    return " ".join(_NORM_RE.findall(str(text).lower()))
+
+
+def _near_duplicate(tokens: set[str], others: Sequence[set[str]], threshold: float) -> bool:
+    return any(len(tokens & o) / max(1, len(tokens | o)) >= threshold for o in others)
+
+
 def build_sample_dataset(
     corpus: Mapping[str, Sequence[Mapping[str, Any]]],
     *,
@@ -162,16 +201,8 @@ def build_sample_dataset(
         if size % CORPUS_INTENTS:
             raise ValueError(f"{name} size {size} is not a multiple of the {CORPUS_INTENTS} intents")
     rng = random.Random(seed)
-    pools = {"train": filter_records(corpus["train"]), "test": filter_records(corpus["test"])}
-    intents = sorted({r["intent"] for r in pools["train"]})
+    intents, by_intent = _intent_pools(corpus, rng)
     phrases = [intent_phrase(intent) for intent in intents]
-    by_intent = {
-        split: {intent: [r for r in pool if r["intent"] == intent] for intent in intents}
-        for split, pool in pools.items()
-    }
-    for split in by_intent.values():
-        for records in split.values():
-            rng.shuffle(records)
     cursor = dict.fromkeys(intents, 0)
     out: dict[str, list[dict[str, Any]]] = {}
     for name, size in sizes.items():
@@ -205,6 +236,118 @@ def build_sample_dataset(
                 }
             )
     return out
+
+
+def build_fresh_test(
+    corpus: Mapping[str, Sequence[Mapping[str, Any]]],
+    splits: Mapping[str, Sequence[Mapping[str, Any]]],
+    *,
+    seed: int = SAMPLE_SEED,
+    per_intent: int = FRESH_TEST_PER_INTENT,
+    near_duplicate_jaccard: float = FRESH_NEAR_DUPLICATE_JACCARD,
+) -> dict[str, Any]:
+    """The fresh test: `per_intent` messages per intent from the same seeded per-intent shuffle of
+    `test.csv` that `build_sample_dataset` used, at the positions after the original test draw, so the
+    original splits are unchanged.
+
+    A message is skipped when its normalised text is already in a split, appears in `train.csv`, or is
+    a near-duplicate (token Jaccard >= `near_duplicate_jaccard`) of a training or validation message.
+    Returns the records (ids `fresh-NNNN`, each with its `source_id`), the skip counts, the SHA-256 of
+    the sorted source ids and the dataset digest; `FRESH_TEST_SOURCE_IDS_SHA256` / `FRESH_TEST_DIGEST`
+    pin the default draw."""
+    if not isinstance(per_intent, int) or per_intent < 1:
+        raise ValueError("per_intent must be a positive int")
+    rng = random.Random(seed)
+    intents, by_intent = _intent_pools(corpus, rng)
+    phrases = [intent_phrase(intent) for intent in intents]
+    offset, rest = divmod(len(splits["test"]), CORPUS_INTENTS)
+    if rest:
+        raise ValueError("the test split is not balanced over the intents; the fresh test needs the sample")
+    used = {normalise(r["query"]) for part in splits.values() for r in part}
+    in_train_csv = {normalise(r["query"]) for r in filter_records(corpus["train"])}
+    seen_tokens = [
+        set(normalise(r["query"]).split()) for name in ("train", "validation") for r in splits[name]
+    ]
+    skipped = {"already_in_a_split": 0, "text_in_train_csv": 0, "near_duplicate_of_train_or_validation": 0}
+    picked: list[dict[str, Any]] = []
+    for intent in intents:
+        taken = 0
+        for r in by_intent["test"][intent][offset:]:
+            if taken == per_intent:
+                break
+            key = normalise(r["query"])
+            if key in used:
+                skipped["already_in_a_split"] += 1
+            elif key in in_train_csv:
+                skipped["text_in_train_csv"] += 1
+            elif _near_duplicate(set(key.split()), seen_tokens, near_duplicate_jaccard):
+                skipped["near_duplicate_of_train_or_validation"] += 1
+            else:
+                picked.append(r)
+                used.add(key)
+                taken += 1
+        if taken < per_intent:
+            raise ValueError(f"fresh test: only {taken} eligible records for {intent!r}, need {per_intent}")
+    random.Random(record_seed("fresh_test", seed)).shuffle(picked)
+    records = []
+    for i, r in enumerate(picked):
+        rid = f"fresh-{i:04d}"
+        records.append(
+            {
+                "id": rid,
+                "source_id": r["id"],
+                "query": r["query"],
+                "positive": r["positive"],
+                "negatives": sample_negatives(
+                    r["query"], r["positive"], phrases, seed=record_seed(rid, seed)
+                ),
+                "intent": r["intent"],
+            }
+        )
+    source_ids = json.dumps(sorted(r["source_id"] for r in records), separators=(",", ":"))
+    return {
+        "records": records,
+        "skipped": skipped,
+        "per_intent": per_intent,
+        "offset": offset,
+        "source_ids_sha256": _sha256_bytes(source_ids.encode("utf-8")),
+        "digest": dataset_digest(records),
+    }
+
+
+def check_fresh_test(
+    fresh: Mapping[str, Any],
+    splits: Mapping[str, Sequence[Mapping[str, Any]]],
+    *,
+    near_duplicate_jaccard: float = FRESH_NEAR_DUPLICATE_JACCARD,
+) -> dict[str, Any]:
+    """Assert the fresh test is the pinned draw, disjoint from every split by normalised text and not a
+    near-duplicate of a training or validation message; returns what was checked."""
+    if fresh["source_ids_sha256"] != FRESH_TEST_SOURCE_IDS_SHA256 or fresh["digest"] != FRESH_TEST_DIGEST:
+        raise ValueError(
+            "the fresh test is not the pinned draw (source ids "
+            f"{fresh['source_ids_sha256'][:12]}..., digest {fresh['digest'][:12]}...): it exists only for "
+            "the "
+            "pinned Banking77 sample at the default split seed"
+        )
+    used = {normalise(r["query"]) for part in splits.values() for r in part}
+    seen_tokens = [
+        set(normalise(r["query"]).split()) for name in ("train", "validation") for r in splits[name]
+    ]
+    for r in fresh["records"]:
+        key = normalise(r["query"])
+        if key in used:
+            raise ValueError(f"fresh test message {r['query'][:60]!r} is already in a split")
+        if _near_duplicate(set(key.split()), seen_tokens, near_duplicate_jaccard):
+            raise ValueError(f"fresh test message {r['query'][:60]!r} near-duplicates a train/validation one")
+    return {
+        "n_records": len(fresh["records"]),
+        "source_ids_sha256": fresh["source_ids_sha256"],
+        "digest": fresh["digest"],
+        "disjoint_from": sorted(splits),
+        "near_duplicate_jaccard": near_duplicate_jaccard,
+        "skipped": dict(fresh["skipped"]),
+    }
 
 
 def fetch_sample_dataset(

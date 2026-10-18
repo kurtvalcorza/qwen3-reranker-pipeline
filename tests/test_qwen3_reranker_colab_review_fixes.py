@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from qwen3_reranker_pipeline import metrics, samples
+from qwen3_reranker_pipeline import metrics, protocol, samples
 from qwen3_reranker_pipeline import pipeline as pl
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -102,7 +102,7 @@ def test_rr_m3_prerequisites_and_troubleshooting_state_the_true_range(notebook):
 
 
 def _m(r1: float, mrr: float) -> dict:
-    return {"recall@1": r1, "recall@3": r1, "recall@5": r1, "mrr": mrr, "median_rank": 1, "n_queries": 154}
+    return {"recall@1": r1, "recall@3": r1, "recall@5": r1, "mrr": mrr, "median_rank": 1, "n_queries": 154, "ties_with_positive": 0, "tie_expected": {"recall@1": r1, "recall@3": r1, "recall@5": r1, "mrr": mrr}}
 
 
 def _section_6_tail(notebook: dict) -> str:
@@ -123,24 +123,33 @@ def _section_8_namespace(adapter, adapted_mrr, use_byod, default_settings):
     return {
         "json": json, "pipe": types.SimpleNamespace(adapter=adapter, evaluate=lambda records, **kw: _m(0.75, adapted_mrr)), "test_records": [], "val_records": [],
         "INSTRUCTION": "i", "floor": _m(0.1667, 0.4083), "baseline_lexical": _m(0.27, 0.46), "frozen_test": _m(0.73, 0.8429), "frozen_vs_floor": "above",
-        "MODEL_ID": "m", "MODEL_REVISION": "r", "MODEL_KEY": "k", "data_source": "stand-in", "dataset_manifests": {"test": {"digest": "d", "candidates": 6}},
-        "disjoint": {}, "adapt_result": {"history": [], "best_epoch": 0}, "adapt_seconds": 0.0,
+        "MODEL_ID": "m", "MODEL_REVISION": "r", "MODEL_KEY": "k", "data_source": "stand-in", "dataset_manifests": {"train": {"digest": "t"}, "validation": {"digest": "v"}, "test": {"digest": "d", "candidates": 6}},
+        "disjoint": {}, "adapt_result": {"history": [], "best_epoch": 0, "lr": 2e-5}, "adapt_seconds": 0.0,
         "USE_BYOD": use_byod, "DEFAULT_SETTINGS": default_settings,
+        # T73-5: the score-once names Section 8 reads (no grid selection here, so these runs are exploratory)
+        **{k: v for k, v in vars(protocol).items() if not k.startswith("__")},
+        "os": os, "compute_dtype": __import__("qwen3_reranker_pipeline.pipeline", fromlist=["compute_dtype"]).compute_dtype, "Path": Path, "random_floor": metrics.random_floor, "grid_selection": None, "fingerprint": None,
+        "fresh_draw": None, "fresh_test_records": None, "data_source_kind": "BYOD" if use_byod else "Banking77 sample",
+        "SPLIT_SEED": 42, "EPOCHS": 2, "BATCH_SIZE": 4, "TRAINABLE_LAYERS": 2, "TRAIN_CANDIDATES": 4, "ADAPT_SEED": 0, "RUN_GRID": True,
     }
 
 
-def test_rr_m3_section_8_holds_only_the_default_sample_run_to_an_improvement(notebook, tmp_path, monkeypatch):
+def test_rr_m3_section_8_records_the_exposed_verdict_and_never_stops_on_it(notebook, tmp_path, monkeypatch):
+    # Superseded by amendment 1 (F2): the exposed development test decides nothing, so a worse adapted MRR there is a
+    # recorded verdict on every path, including the default sample run.
     monkeypatch.chdir(tmp_path)
     (tmp_path / "outputs").mkdir()
     source = _cell(notebook, "delta_mrr = ")
-    with pytest.raises(RuntimeError, match="adapted MRR must be above the frozen MRR"):
-        exec(compile(source, "<section 8>", "exec"), _section_8_namespace({}, 0.8, False, True))
-    for use_byod, default_settings in ((True, True), (False, False)):
+    assert "adapted MRR must be above the frozen MRR" not in source
+    for use_byod, default_settings in ((False, True), (True, True)):
         namespace = _section_8_namespace({}, 0.8, use_byod, default_settings)
         exec(compile(source, "<section 8>", "exec"), namespace)
         assert namespace["comparison"]["verdict"]["adapted_vs_frozen_mrr"] == "worse"
-    report = json.loads((tmp_path / "outputs" / "qwen3_reranker_evaluation_report.json").read_text(encoding="utf-8"))
+    reports = sorted((tmp_path / "outputs").glob("qwen3_reranker_evaluation_report_exploratory_*.json"))
+    assert len(reports) == 2 and not (tmp_path / "outputs" / "qwen3_reranker_evaluation_report.json").exists()
+    report = json.loads(reports[-1].read_text(encoding="utf-8"))
     assert report["verdict"]["adapted_vs_frozen_mrr"] == "worse"
+    assert report["test_look"] == "not scored (exploratory)" and report["fresh_test"] is None
 
 
 def test_rr_m3_default_settings_flag_matches_the_form_defaults(notebook):
@@ -222,7 +231,8 @@ def test_rr_m4_activity_follows_the_five_steps(notebook):
     steps = [md.index(f"{i}. **{name}.**", start) for i, name in enumerate(("Predict", "Change", "Run", "Observe", "Explain"), 1)]
     assert steps == sorted(steps)
     assert "<details><summary>Check your reasoning</summary>" in md[steps[-1] :]
-    assert "To put the notebook back to the recorded state" in md
+    assert "To put the notebook back to the pre-registered state" in md
+    assert "so it is **exploratory**" in md
     assert "Optional experiments (they do not affect the default path)" not in md
 
 
@@ -232,10 +242,13 @@ def test_rr_m4_activity_follows_the_five_steps(notebook):
 def test_rr_m1_quoted_figures_name_their_device(notebook):
     md = _markdown(notebook)
     assert "+4.5 points in a few minutes on CPU" not in md and "a 126 MB adapter" not in md
-    assert "+4.5 in the float32 CPU build record, +3.2 on the recorded Kaggle Tesla T4 run" in md
-    assert "The CPU float32 build record's sweep on this sample" in md
-    assert "the recorded Kaggle Tesla T4 run of the default reached 76.6 %" in md
-    assert "about 126 MB in float32 on CPU" in md and "63 MB in bfloat16 on CUDA" in md
+    # T73-4 (REL13), requoted 2026-10-18: worked answers name the float32 evaluation of record (blob 2d6e5607); the
+    # earlier bfloat16 device gap is history (1-2 points).
+    assert "Kaggle Tesla T4 run of 19 September 2026" not in md and "differ in the last digits" not in md
+    assert "the hosted Colab T4 run of notebook blob `2d6e5607` (commit `ff6da3a`, 18 October 2026" in md and "93f1a9d5" not in md
+    assert "by up to one or two points of recall@1" in md
+    assert "held-out recall@1" not in md and "the default keeps 2e-5" not in md
+    assert "about 126 MB in float32 on every device" in md and "63 MB in bfloat16" not in md  # amendment 2
 
 
 def test_rr_m2_minor_no_template_escapes_in_markdown(notebook):
@@ -244,11 +257,13 @@ def test_rr_m2_minor_no_template_escapes_in_markdown(notebook):
     assert "`[A-Za-z0-9_.:-]{1,64}`" in md
 
 
-def test_rr_m3_minor_lexical_baseline_is_described_as_weakened_by_construction(notebook):
+def test_rr_m3_minor_lexical_baseline_below_the_floor_is_explained_by_ties(notebook):
+    # Superseded by T73-3: the below-floor values are a tie-handling artefact, shown beside the tie-expected values.
     md = _markdown(notebook)
-    assert "deliberately hard to beat" not in md
-    assert "weakened by construction and can score **below the random floor**" in md
-    assert "(0.4156 against 0.5) and recall@5 (0.7532 against 0.8333)" in md
+    assert "deliberately hard to beat" not in md and "crowd its top three" not in md
+    assert "weakened by construction" not in md
+    assert "a tie-handling artefact, not word overlap from the hard negatives" in md
+    assert "recall@1 0.3335, recall@3 0.5640, recall@5 0.9118 and MRR 0.5301" in md
     assert "a sanity reference, not a" in md
 
 
@@ -264,8 +279,12 @@ def test_rr_m4_minor_printed_ceilings_match_what_adapt_enforces(notebook):
             pipe.adapt(_records(12), _records(2), train_candidates=bad)
 
 
-def test_rr_m5_minor_notebook_declares_spec_2_2(notebook):
-    assert notebook["metadata"]["dimer"]["notebook_spec"] == "2.2"
+def test_rr_m5_minor_notebook_declares_spec_2_5(notebook):
+    # T73-6: spec 2.5 (kind and use notice in the header cell, before the first code cell).
+    assert notebook["metadata"]["dimer"]["notebook_spec"] == "2.5"
+    assert notebook["metadata"]["dimer"]["notebook_kind"] == "TUTORIAL"
     md = _markdown(notebook)
-    assert "DIMER Notebook Specification 2.2" in md and "DIMER Notebook Specification 2.0" not in md
+    assert "DIMER Notebook Specification 2.5" in md and "DIMER Notebook Specification 2.2" not in md
+    header = _source(notebook["cells"][0])
+    assert "> **⚠️ Notice.**" in header and "**Kind:** `TUTORIAL`" in header
     assert "NOTEBOOK_SPEC 2.0" not in md

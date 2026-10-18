@@ -18,6 +18,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from qwen3_reranker_pipeline import metrics, protocol
 from qwen3_reranker_pipeline import pipeline as pl
 from qwen3_reranker_pipeline.pipeline import Qwen3RerankerPipeline as PIPELINE_CLASS
 
@@ -147,7 +148,8 @@ def test_swp_g_guided_layer_is_present_and_infrastructure_is_collapsed(notebook)
 
 def test_swp_g_checkpoint_answers_quote_the_recorded_run(notebook):
     md = _markdown(notebook)
-    for value in ("0.7338", "0.7662", "0.2662", "0.4156", "0.8429", "0.8634", "0.9125"):
+    # the float32 evaluation of record of 2026-10-18 (ff6da3a): exposed adapted 0.7792 / 0.8725, reload parity 0.975
+    for value in ("0.7338", "0.7792", "0.2662", "0.4156", "0.8429", "0.8725", "0.975"):
         assert value in md, value
 
 
@@ -161,7 +163,7 @@ def test_swp_a_no_model_quality_assert_remains(notebook):
 
 
 def _m(r1: float, mrr: float) -> dict:
-    return {"recall@1": r1, "recall@3": r1, "recall@5": r1, "mrr": mrr, "median_rank": 1, "n_queries": 154}
+    return {"recall@1": r1, "recall@3": r1, "recall@5": r1, "mrr": mrr, "median_rank": 1, "n_queries": 154, "ties_with_positive": 0, "tie_expected": {"recall@1": r1, "recall@3": r1, "recall@5": r1, "mrr": mrr}}
 
 
 def test_swp_a_section_6_records_frozen_vs_floor_and_keeps_the_contract_check(notebook):
@@ -184,12 +186,16 @@ def test_swp_a_section_8_records_the_verdict_and_writes_the_report(notebook, tmp
         "json": json, "pipe": types.SimpleNamespace(adapter={}, evaluate=lambda records, **kw: _m(0.75, adapted_mrr)), "test_records": [], "val_records": [],
         "USE_BYOD": True, "DEFAULT_SETTINGS": True,
         "INSTRUCTION": "i", "floor": _m(0.1667, 0.4083), "baseline_lexical": _m(0.27, 0.46), "frozen_test": _m(0.73, 0.8429), "frozen_vs_floor": "above",
-        "MODEL_ID": "m", "MODEL_REVISION": "r", "MODEL_KEY": "k", "data_source": "stand-in", "dataset_manifests": {"test": {"digest": "d", "candidates": 6}},
-        "disjoint": {}, "adapt_result": {"history": [], "best_epoch": 0}, "adapt_seconds": 0.0,
+        "MODEL_ID": "m", "MODEL_REVISION": "r", "MODEL_KEY": "k", "data_source": "stand-in", "dataset_manifests": {"train": {"digest": "t"}, "validation": {"digest": "v"}, "test": {"digest": "d", "candidates": 6}},
+        "disjoint": {}, "adapt_result": {"history": [], "best_epoch": 0, "lr": 2e-5}, "adapt_seconds": 0.0,
+        **{k: v for k, v in vars(protocol).items() if not k.startswith("__")},
+        "os": __import__("os"), "compute_dtype": __import__("qwen3_reranker_pipeline.pipeline", fromlist=["compute_dtype"]).compute_dtype, "Path": Path, "random_floor": metrics.random_floor, "grid_selection": None, "fingerprint": None,
+        "fresh_draw": None, "fresh_test_records": None, "data_source_kind": "BYOD",
+        "SPLIT_SEED": 42, "EPOCHS": 2, "BATCH_SIZE": 4, "TRAINABLE_LAYERS": 2, "TRAIN_CANDIDATES": 4, "ADAPT_SEED": 0, "RUN_GRID": True,
     }
     exec(compile(source, "<section 8>", "exec"), namespace)
     assert namespace["comparison"]["verdict"]["adapted_vs_frozen_mrr"] == verdict
-    report = json.loads((tmp_path / "outputs" / "qwen3_reranker_evaluation_report.json").read_text(encoding="utf-8"))
+    report = json.loads((tmp_path / "outputs" / "qwen3_reranker_evaluation_report_exploratory_1.json").read_text(encoding="utf-8"))
     assert report["verdict"]["adapted_vs_frozen_mrr"] == verdict
     assert "'verdict': comparison['verdict']," in _cell(notebook, "result_payload = {")
 
