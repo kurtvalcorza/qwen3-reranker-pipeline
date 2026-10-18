@@ -43,11 +43,26 @@ TEST_LOOKS = (
     "not scored (exploratory)",
     "not scored (fresh test masked for a development check)",
 )
-# The evaluation of record: the first hosted T4 (cuda, bfloat16) run with the pre-registered settings. It is set only by
-# the requote that follows that run; docs/release-verification.md names the run of record. A reproduction is defined by
+# The evaluation of record: the first hosted T4 (cuda, float32; amendment 2) run with the pre-registered settings, set by
+# the requote that followed that run; docs/release-verification.md names the run of record. A reproduction is defined by
 # identical pre-registered settings and module code except this constant (amendment 1, section 10). The notebook prints it
 # beside its own (this runtime) scoring and never uses it to change a setting.
-RECORDED_EVALUATION: dict[str, Any] | None = None
+RECORDED_EVALUATION: dict[str, Any] | None = {
+    "executor": "Colab CLI 0.7.4, fresh Colab Tesla T4",
+    "date": "2026-10-18",
+    "commit": "ff6da3a",
+    "blob": "2d6e5607",
+    "evidence": "docs/execution-evidence/2026-10-18-ff6da3a/",
+    "dtype": "float32",
+    "evaluated_system": "adapted (lr 2e-05)",
+    "fresh_mrr": {"frozen": 0.851, "adapted": 0.879},
+    "paired_delta_mrr": 0.0279,
+    "ci95_mrr": [0.0086, 0.0476],
+    "fresh_recall@1": {"frozen": 0.7455, "adapted": 0.7922},
+    "paired_delta_recall@1": 0.0468,
+    "ci95_recall@1": [0.013, 0.0805],
+    "verdict": {"mrr": "improved", "recall@1": "improved"},
+}
 RETRAIN_TOLERANCE = GRID_MARGIN  # amendment 1, section 4: re-train vs grid-run kept-epoch validation MRR
 # The pipeline's record (after `adapt`) must equal Section 7's selected run on these keys before the fresh test is read.
 _ADAPTER_KEYS = ("lr", "epochs", "batch_size", "trainable_layers", "train_candidates", "seed", "best_epoch", "n_train")

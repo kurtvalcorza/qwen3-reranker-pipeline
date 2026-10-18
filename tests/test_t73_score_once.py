@@ -203,12 +203,13 @@ def test_t73_5_section_8_scores_the_fresh_test_only_when_preregistered(notebook,
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("DIMER_MASK_FRESH_TEST", raising=False)
     (tmp_path / "outputs").mkdir()
-    ns, fresh_calls = _section_8(notebook, tmp_path)
+    # before an evaluation of record exists (RECORDED_EVALUATION None) the first identical scoring is the pre-registered one
+    ns, fresh_calls = _section_8(notebook, tmp_path, RECORDED_EVALUATION=None)
     assert ns["test_look"] == "pre-registered evaluation (this runtime)" and fresh_calls == ["frozen", "adapted"]
     report = json.loads((tmp_path / "outputs" / "qwen3_reranker_evaluation_report.json").read_text(encoding="utf-8"))
     assert report["test_look"] == ns["test_look"] and report["settings_differing"] == [] and report["fresh_test"]["n_queries"] == 3
     # an identical second scoring in the same runtime is a reproduction with its own file
-    ns2, fresh_calls = _section_8(notebook, tmp_path, fresh_test_look=ns["fresh_test_look"])
+    ns2, fresh_calls = _section_8(notebook, tmp_path, fresh_test_look=ns["fresh_test_look"], RECORDED_EVALUATION=None)
     assert ns2["test_look"] == "reproduction (this runtime)" and fresh_calls == ["frozen", "adapted"]
     assert (tmp_path / "outputs" / "qwen3_reranker_evaluation_report_reproduction_1.json").is_file()
 
@@ -250,7 +251,7 @@ def test_t73_r2_f8_form_fields_do_not_decide_and_a_stale_fingerprint_fires(noteb
     monkeypatch.delenv("DIMER_MASK_FRESH_TEST", raising=False)
     (tmp_path / "outputs").mkdir()
     ns, fresh_calls = _section_8(notebook, tmp_path, EPOCHS=7, BATCH_SIZE=1)  # globals edited after training: irrelevant
-    assert ns["test_look"] == "pre-registered evaluation (this runtime)" and fresh_calls == ["frozen", "adapted"]
+    assert protocol.fresh_test_scored(ns["test_look"]) and fresh_calls == ["frozen", "adapted"]
     ns, fresh_calls = _section_8(notebook, tmp_path, dataset_manifests={"train": {"digest": "t"}, "validation": {"digest": "other"}, "test": {"digest": "d", "candidates": 6}})
     assert any(d.startswith("grid selection") for d in ns["differing"]) and fresh_calls == []
 
@@ -409,3 +410,57 @@ def test_t73_6_stamped_revision_carries_the_embedded_modules(notebook):
         except (OSError, subprocess.CalledProcessError):
             pytest.skip(f"revision {stamp[:12]} is not in this clone (shallow CI checkout)")
         assert at_stamp.replace(b"\r\n", b"\n") == (ROOT / rel).read_bytes().replace(b"\r\n", b"\n"), f"{rel} differs from the stamped revision {stamp[:12]}"
+
+
+# --- Requote 2026-10-18: the evaluation of record is the hosted T4 float32 run of ff6da3a ---------------------------
+
+
+EVIDENCE = ROOT / "docs" / "execution-evidence" / "2026-10-18-ff6da3a" / "qwen3_reranker_colab_ff6da3a_colab-cli-t4_output.ipynb"
+
+
+def _evidence_fresh_block() -> dict:
+    import ast
+
+    nb = json.loads(EVIDENCE.read_text(encoding="utf-8"))
+    for cell in nb["cells"]:
+        for out in cell.get("outputs", []):
+            for line in "".join(out.get("text", "")).splitlines():
+                if line.startswith("{'fresh_test': {'test_look'"):
+                    return ast.literal_eval(line)["fresh_test"]
+    raise AssertionError("no fresh-test block in the evidence notebook")
+
+
+def test_requote_recorded_evaluation_equals_the_evidence_notebook():
+    rec, fresh = protocol.RECORDED_EVALUATION, _evidence_fresh_block()
+    assert rec is not None and rec["commit"] == "ff6da3a" and rec["blob"] == "2d6e5607" and rec["dtype"] == fresh["dtype"] == "float32"
+    assert fresh["test_look"] == "pre-registered evaluation (this runtime)" and fresh["digest"] == samples.FRESH_TEST_DIGEST
+    for system in ("frozen", "adapted"):
+        assert rec["fresh_mrr"][system] == round(fresh["metrics"][system]["mrr"], 4)
+        assert rec["fresh_recall@1"][system] == round(fresh["metrics"][system]["recall@1"], 4)
+    diff = fresh["bootstrap"]["difference"]
+    assert rec["paired_delta_mrr"] == round(diff["mrr"]["point"], 4) and rec["ci95_mrr"] == [round(x, 4) for x in diff["mrr"]["ci95"]]
+    assert rec["paired_delta_recall@1"] == round(diff["recall@1"]["point"], 4) and rec["ci95_recall@1"] == [round(x, 4) for x in diff["recall@1"]["ci95"]]
+    assert rec["verdict"] == fresh["verdict"] == {"mrr": "improved", "recall@1": "improved"}
+
+
+def test_requote_with_the_record_set_an_identical_run_is_a_reproduction(notebook, tmp_path, monkeypatch):
+    # SCORE_ONCE_RULE item 3: with RECORDED_EVALUATION set, the first identical scoring in a new runtime reproduces the record
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("DIMER_MASK_FRESH_TEST", raising=False)
+    (tmp_path / "outputs").mkdir()
+    ns, fresh_calls = _section_8(notebook, tmp_path)
+    assert ns["RECORDED_EVALUATION"] is protocol.RECORDED_EVALUATION
+    assert ns["test_look"] == "reproduction (this runtime)" and fresh_calls == ["frozen", "adapted"]
+    assert (tmp_path / "outputs" / "qwen3_reranker_evaluation_report_reproduction_1.json").is_file()
+    assert not (tmp_path / "outputs" / "qwen3_reranker_evaluation_report.json").exists()
+    # a changed setting is still exploratory, record or not
+    ns, fresh_calls = _section_8(notebook, tmp_path, run_overrides={"epochs": 3})
+    assert ns["test_look"] == "not scored (exploratory)" and fresh_calls == []
+
+
+def test_requote_notebook_text_quotes_the_float32_record():
+    text = NOTEBOOK.read_text(encoding="utf-8")
+    for stale in ("low-order digits", "exist only after the first hosted run", "about 25 minutes", "about 11.5 minutes", "0.9125 in memory", "+3.2", "flloat16"):
+        assert stale not in text, stale
+    for quote in ("2d6e5607", "MRR 0.851 → 0.879", "0.009 to 0.048", "0.013 to 0.081", "16.6 minutes", "7.4 minutes", "0.975 in memory", "+4.5", "0.7792", "0.8725"):
+        assert quote in text, quote

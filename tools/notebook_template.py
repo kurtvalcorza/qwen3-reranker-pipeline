@@ -63,7 +63,7 @@ TEMPLATE = {
         "the pre-registered settings, reranks the same shortlists with the adapted model, exports the adapter as safetensors with "
         "a manifest, and reloads that artifact into a fresh pipeline to verify parity. The default path needs no "
         "repository clone, no DIMER worker or service, no credential, no upload dialog and no configuration edit "
-        "(NOTEBOOK_SPEC 2.5 §5). On CPU the whole path takes 75 minutes or more of model time after the downloads (on a T4 about 25 minutes) — "
+        "(NOTEBOOK_SPEC 2.5 §5). On CPU the whole path takes 75 minutes or more of model time after the downloads (the recorded T4 run took 16.6 minutes for the whole session, 995 s including the environment build and the 1.2 GB download) — "
         "a cross-encoder scores every query–candidate pair with a full forward pass, so evaluation dominates; a CUDA "
         "runtime is used automatically when present (float32 on every device; pre-registration amendment 2)."
     ),
@@ -95,9 +95,9 @@ TEMPLATE = {
             'environment, the carried package and the model snapshot — and their cells are collapsed; you may run them without studying them. The learning path '
             'starts in Section 4. Form fields (`# @param`) are the only values meant to be edited, and the defaults reproduce the recorded run. Before each '
             'principal result the notebook asks you to **Predict**; after it come **What to notice** and a collapsible **Check your reasoning** with a worked '
-            "answer from the recorded run (the Colab T4 run of notebook blob `93f1a9d5` (commit `d064746`, 9 October 2026; `docs/execution-evidence/2026-10-09-d064746/`), bfloat16 on CUDA), which predates the fresh test: its numbers are on the 154 shortlists now called the "
-            "**exposed development test**. Fresh-test numbers exist only after the first hosted run with the pre-registered settings (`docs/release-verification.md`). "
-            'This notebook now runs float32 on every device (amendment 2); the recorded T4 run trained in bfloat16, which differed from CPU float32 by up to one or two points of recall@1 (77.9 % on CPU against 76.6 % on the T4 for the same adapted setting). Every adaptation starts from the pinned base, so re-running '
+            "answer from the recorded run: the hosted Colab T4 run of notebook blob `2d6e5607` (commit `ff6da3a`, 18 October 2026; `docs/execution-evidence/2026-10-18-ff6da3a/`), float32, the pre-registered evaluation of record (`docs/release-verification.md`). Most worked answers are on the 154 shortlists called the "
+            "**exposed development test**; on the 385-shortlist fresh test that run gave MRR 0.851 → 0.879 (paired difference +0.028, 95 % CI 0.009 to 0.048) and recall@1 +0.047 (95 % CI 0.013 to 0.081), verdict *improved*. "
+            'This notebook runs float32 on every device (amendment 2), and the recorded T4 run equals the CPU float32 build at printed precision on the grid and the exposed development test. Every adaptation starts from the pinned base, so re-running '
             'Section 7 with other settings is a fresh, **exploratory** experiment (it never scores the fresh test); Sections 5 and 6 put the pinned base back before they measure, so their numbers are always the '
             "frozen model's, and after re-running them you re-run Section 7 before Sections 8 and 9 (those two cells refuse to treat the base as \"adapted\"). "
             '**Troubleshooting**, a **Glossary** and a **Conclusion** template are at the end. Writing your '
@@ -395,7 +395,7 @@ TEMPLATE = {
                 "skill on its own. "
                 "`pipe.evaluate` scores every query–candidate pair through `rerank` (`MAX_PAIRS` at a time), orders each "
                 "shortlist by the relevance score and reads the rank of the positive; ties are counted against it. Look "
-                "for the frozen reranker well above both — the Colab T4 run of notebook blob 93f1a9d5 (commit d064746, 9 October 2026; docs/execution-evidence/2026-10-09-d064746/) printed recall@1 0.7338 and MRR "
+                "for the frozen reranker well above both — the hosted Colab T4 float32 run of notebook blob 2d6e5607 (commit ff6da3a, 18 October 2026; docs/execution-evidence/2026-10-18-ff6da3a/), the evaluation of record printed recall@1 0.7338 and MRR "
                 "0.8429 here — and read `median_rank` beside the means. About 132 s on CPU: 924 forward "
                 "passes. Like Section 5, the cell puts the pinned base back first, so `frozen_model_test` is always the "
                 "pretrained model (`adapted: False`). Whether the frozen model beats the random floor is recorded as a "
@@ -434,7 +434,7 @@ TEMPLATE = {
         {
             "md": (
                 '**What to notice:** the three systems on recall@1/3/5 and MRR, `median_rank`, and the verdict line.\n\n<details><summary>Check your '
-                'reasoning</summary>Ties. In the Colab T4 run of notebook blob 93f1a9d5 (commit d064746, 9 October 2026; docs/execution-evidence/2026-10-09-d064746/) (exposed development test) recall@1 was 0.1667 for the random floor, 0.2662 for the '
+                'reasoning</summary>Ties. In the hosted Colab T4 float32 run of notebook blob 2d6e5607 (commit ff6da3a, 18 October 2026; docs/execution-evidence/2026-10-18-ff6da3a/), the evaluation of record (exposed development test) recall@1 was 0.1667 for the random floor, 0.2662 for the '
                 'pessimistic lexical baseline and 0.7338 for the frozen reranker; at recall@3 the pessimistic lexical value (0.4156) fell below the floor (0.5). '
                 'The floor is an expectation over random orderings, while the pessimistic rule ranks every tied negative above the gold phrase, and 86 of 154 '
                 'shortlists tie. Counted the floor\'s way, lexical is 0.3335 / 0.5640 / 0.9118 at recall@1/3/5 — above the floor everywhere. Compare systems under '
@@ -461,7 +461,7 @@ TEMPLATE = {
                 "sampling noise of 77 validation queries by design, not a detection threshold — and the selected run must beat the frozen model's validation MRR by 0.010 or the frozen model is kept "
                 "as the evaluated system (`docs/qwen3-reranker-preregistration.md`). Then the selected learning rate is trained **again** "
                 "with the same seed: Sections 8 and 9 use this re-train, not the grid run, and Section 8 checks that its kept-epoch "
-                "validation MRR is within 0.010 of the grid run's. The grid adds three runs (about 11.5 minutes on a T4, about 40 on CPU). With "
+                "validation MRR is within 0.010 of the grid run's. The grid adds three runs (7.4 minutes, 445 s, on the recorded T4 run; about 40 on CPU). With "
                 "`RUN_GRID = False` the cell uses `LEARNING_RATE` and the run is exploratory. Any change to these fields makes the "
                 "run exploratory: Section 8 then reads validation and the exposed development test only, never the fresh test. "
                 "Every call starts from the pinned base (`started_from` in the printed result), so a re-run with other settings is a "
@@ -512,7 +512,7 @@ TEMPLATE = {
         {
             "md": (
                 '**What to notice:** epoch 0 (`note: frozen model`), the training loss, `val_recall@1` and `val_mrr` per epoch, `best_epoch`, and `started_from`.\n\n<details><summary>Check '
-                "your reasoning</summary>Often not. In the earlier CPU build (commit d79994f) 2e-5 and 5e-5 reached the same kept-epoch validation MRR (0.923), "
+                "your reasoning</summary>Often not. In the earlier CPU build (commit d79994f) 2e-5 and 5e-5 reached the same kept-epoch validation MRR (0.923), and on the recorded T4 run 0.9232 and 0.9229, "
                 'with 5e-5 peaking at epoch 1 — on 77 validation queries such differences sit inside the margin, so the default stays unless a challenger clearly '
                 'wins. Validation MRR, not training loss and never a test split, picks both the learning rate and the kept epoch. Your grid table is the answer for '
                 'this runtime.</details>'
@@ -527,7 +527,7 @@ TEMPLATE = {
                 "grid's selection — and checks that the model in memory is the run Section 7 trained. `settings_differing` lists "
                 "anything that differs and `test_look` names the outcome: **pre-registered evaluation (this runtime)** scores the "
                 "385 fresh shortlists for the random floor, the lexical baseline, the frozen model and the evaluated system; a "
-                "second identical scoring in the same runtime is a **reproduction**; anything else is **not scored "
+                "second identical scoring in the same runtime, and any identical scoring once the carried protocol names the evaluation of record (`RECORDED_EVALUATION`, the 2026-10-18 hosted T4 run), is a **reproduction** with `_reproduction_<n>` files; anything else is **not scored "
                 "(exploratory)**, and its files get an `_exploratory_<n>` suffix so they never overwrite the pre-registered ones. "
                 "Which hosted run is the evaluation of record is stated in `docs/release-verification.md`, not here. The exposed "
                 "development test (the original 154 shortlists, which informed an earlier learning-rate choice) is always shown "
@@ -558,12 +558,14 @@ TEMPLATE = {
                 "trained = adapter_settings(pipe.adapter)  # training settings from the model in memory, not the form fields (amendment 1, s5)\n"
                 "fingerprint_now = run_fingerprint(data_source=data_source_kind, split_seed=SPLIT_SEED, train_digest=dataset_manifests['train']['digest'], validation_digest=dataset_manifests['validation']['digest'], instruction=trained['instruction'], epochs=trained['epochs'], batch_size=trained['batch_size'], trainable_layers=trained['trainable_layers'], train_candidates=trained['train_candidates'], adapt_seed=trained['adapt_seed'])\n"
                 "device = str(getattr(pipe, 'device', 'cpu'))\n"
-                "dtype = compute_dtype(device)  # float32 on every device (amendment 2); recorded, not pre-registered: the record is the T4 flloat16 run (amendment 1, s3)\n"
+                "dtype = compute_dtype(device)  # float32 on every device (amendment 2); recorded, not pre-registered: the record (2026-10-18, T4) ran float32 (amendment 2)\n"
                 "run_settings = {{'data_source': data_source_kind, 'split_seed': SPLIT_SEED, 'fresh_test_digest': fresh_draw['digest'] if fresh_draw else None, **trained, 'grid_run': RUN_GRID, 'device': device, 'dtype': dtype}}\n"
                 "differing = settings_differing(run_settings, grid_selection, fingerprint_now, model_state)\n"
                 "preregistered = not differing  # every fixed setting, the grid selection and the model state\n"
                 "FRESH_MASKED = os.environ.get('DIMER_MASK_FRESH_TEST') == '1'  # development checks only (SCORE_ONCE_RULE item 8)\n"
-                "test_look = look_at_test(differing, {{'test_look': globals().get('fresh_test_look')}}, masked=FRESH_MASKED)\n"
+                "# With an evaluation of record in the carried protocol, an identical pre-registered scoring is its reproduction (rule item 3).\n"
+                "prior_look = globals().get('fresh_test_look') or (TEST_LOOKS[1] if RECORDED_EVALUATION else None)\n"
+                "test_look = look_at_test(differing, {{'test_look': prior_look}}, masked=FRESH_MASKED)\n"
                 "suffix = output_suffix('outputs/{stem}_evaluation_report.json', test_look)\n"
                 "def suffixed(path):\n"
                 "    p = Path(path)\n"
@@ -645,9 +647,9 @@ TEMPLATE = {
             "md": (
                 '**What to notice:** `test_look` and `settings_differing`, the four rows on the exposed development test, `delta_vs_frozen`, the `verdict`, and the fresh-test block.\n\n<details><summary>Check your reasoning</summary>Validation and the exposed '
                 'development test only: any changed field makes the run exploratory, the fresh test stays unscored and the files get an `_exploratory_<n>` suffix. '
-                'For reference, in the Colab T4 run of notebook blob 93f1a9d5 (commit d064746, 9 October 2026; docs/execution-evidence/2026-10-09-d064746/) the exposed development test gave recall@1 0.7338 → 0.7662, MRR 0.8429 → 0.8634 and recall@5 '
-                '0.9935 (verdict *improved*). A three-point gain on 154 shortlists from one seed is sample-sanity evidence, not a measured improvement; the fresh '
-                'test numbers of the first hosted pre-registered run are in `docs/release-verification.md`.</details>'
+                'For reference, in the hosted Colab T4 float32 run of notebook blob 2d6e5607 (commit ff6da3a, 18 October 2026; docs/execution-evidence/2026-10-18-ff6da3a/), the evaluation of record the exposed development test gave recall@1 0.7338 → 0.7792, MRR 0.8429 → 0.8725 and recall@5 '
+                '0.9935 (verdict *improved*). A 4.5-point gain on 154 shortlists from one seed is sample-sanity evidence, not a measured improvement. On the fresh '
+                'test the same run gave MRR 0.851 → 0.879 (paired difference +0.028, 95 % CI 0.009 to 0.048) and recall@1 +0.047 (95 % CI 0.013 to 0.081), verdict *improved*; the interval covers the choice of shortlists only (`docs/release-verification.md`).</details>'
             ),
         },
         {
@@ -733,8 +735,8 @@ TEMPLATE = {
             "md": (
                 "**What to notice:** the gold intent's rank before and after for the three shortlists, the artifact's size, and `reload_parity`.\n\n<details><summary>Check "
                 'your reasoning</summary>Scores from the adapted model are on a different scale from the frozen ones — the `yes` share moves for every pair — so '
-                'compare ranks, not scores. In the Colab T4 run of notebook blob 93f1a9d5 (commit d064746, 9 October 2026; docs/execution-evidence/2026-10-09-d064746/) the reloaded adapter gave identical scores and the same validation MRR on the 20-query parity subset '
-                '(0.9125 in memory and reloaded).</details>'
+                'compare ranks, not scores. In the hosted Colab T4 float32 run of notebook blob 2d6e5607 (commit ff6da3a, 18 October 2026; docs/execution-evidence/2026-10-18-ff6da3a/), the evaluation of record the reloaded adapter gave identical scores and the same validation MRR on the 20-query parity subset '
+                '(0.975 in memory and reloaded).</details>'
             ),
         },
     ],
@@ -742,10 +744,10 @@ TEMPLATE = {
         "## Interpretation and limits\n\n"
         "The frozen reranker already puts the right intent phrase first for most unseen messages (recall@1 in the "
         "seventies against a lexical baseline and a random floor of 16.7 %), and a bounded listwise fine-tuning of the "
-        "last two decoder layers on 231 shortlists lifted recall@1 on the exposed development test by a few points (+3.2 in "
-        "the Colab T4 run of notebook blob 93f1a9d5 (commit d064746, 9 October 2026; docs/execution-evidence/2026-10-09-d064746/), bfloat16; that split informed an earlier learning-rate choice, so read it as a "
-        "development number). The fresh-test result of the pre-registered settings is Section 8's and "
-        "`docs/release-verification.md`'s, with an adapter of about 126 MB in float32 that reloads to "
+        "last two decoder layers on 231 shortlists lifted recall@1 on the exposed development test by a few points (+4.5 in "
+        "the hosted Colab T4 float32 run of notebook blob 2d6e5607 (commit ff6da3a, 18 October 2026; docs/execution-evidence/2026-10-18-ff6da3a/), the evaluation of record; that split informed an earlier learning-rate choice, so read it as a "
+        "development number). On the fresh test the pre-registered settings gave MRR 0.851 → 0.879 on that run (paired difference "
+        "+0.028, 95 % CI 0.009 to 0.048; `docs/release-verification.md`), with an adapter of about 126 MB in float32 that reloads to "
         "identical scores. "
         "That is the claim: the adaptation contract can adapt the reranker to a relevance judgement end to end on a real "
         "labelled corpus, and the numbers it produces are read against a random floor, a lexical baseline and the frozen "
@@ -755,8 +757,8 @@ TEMPLATE = {
         "recall@k and MRR say whether the gold document is ordered first within a shortlist the dataset supplied, not how "
         "the model would rank a real candidate pool. The adapter changes the last layers, which every pair shares, so "
         "every score shifts and scores are not comparable across the frozen and adapted models; nothing here measures the "
-        "effect on other judgements. The model now runs in float32 on every device (amendment 2); the earlier bfloat16 T4 runs differed from CPU by up to one or two points "
-        "of recall@1. A cross-encoder scores one pair per forward pass, so evaluation cost grows with the "
+        "effect on other judgements. The model now runs in float32 on every device (amendment 2); the float32 T4 record equals the CPU float32 build at printed precision "
+        "(the earlier bfloat16 T4 runs had differed by up to one or two points of recall@1). A cross-encoder scores one pair per forward pass, so evaluation cost grows with the "
         "shortlist length — a first-stage retriever (the sibling embedding pipeline) is what makes the shortlist short.\n\n"
         "Three things to carry to real data. **Floors first:** the random floor and the lexical baseline on *your* "
         "shortlists, under the same tie policy, are the numbers to read before any reranker's; a lexical baseline near the frozen model means the "
@@ -783,9 +785,9 @@ TEMPLATE = {
         "starting point. Then read `test_look` (*not scored (exploratory)*) and `delta_vs_frozen` in Section 8 and compare it with the default's.\n"
         "5. **Explain.** Say in one sentence what the second layer added, and whether that is worth twice the adapter size for this task.\n\n"
         "To put the notebook back to the pre-registered state, set `TRAINABLE_LAYERS = 2` and `RUN_GRID = True` and run Sections 7, 8 and 9 again "
-        "(a second pre-registered scoring in the same runtime is labelled a reproduction).\n\n"
+        "(an identical pre-registered scoring is labelled a reproduction of the recorded evaluation).\n\n"
         "<details><summary>Check your reasoning</summary>There is no recorded run of this setting, so there is no worked number to match. "
-        "The default itself moved exposed-development recall@1 by only +3.2 points on the recorded Colab T4 run, because the frozen reranker already "
+        "The default itself moved exposed-development recall@1 by only +4.5 points on the recorded Colab T4 run (7 of 154 shortlists), because the frozen reranker already "
         "puts the right intent first in about three of four shortlists; one layer has less capacity to reorder the rest, so a change no larger "
         "than the default's — possibly none — is the reasonable expectation. On 154 shortlists from one seed a difference of a point or two is "
         "within run-to-run noise: what you can conclude is the direction and the adapter-size trade-off, not a ranking of the two settings.</details>\n\n"
@@ -803,8 +805,8 @@ TEMPLATE = {
         'names the file. Delete it from the snapshot folder Section 3 prints and run Section 3 again.\n- **Section 4 reports a size or SHA-256 mismatch for a '
         'Banking77 file** — the download from `raw.githubusercontent.com` was cut short or altered. Run Section 4 again; a verified cached file is reused.\n- '
         '**Sections 6–8 are very slow** — a cross-encoder runs one forward pass per query–candidate pair (924 for the test split); on CPU that is minutes per '
-        'evaluation. Switch to a T4 GPU.\n- **Your numbers differ slightly from the recorded run** — the 2026-10-09 record trained in bfloat16, this notebook in float32, and GPU and CPU kernels differ in low-order digits; the comparison between '
-        'systems, not the last digit, is the result.\n- **BYOD: a column or record refusal** — the message names the rule: columns `id`, `query`, `positive`, '
+        'evaluation. Switch to a T4 GPU.\n- **Your numbers differ slightly from the recorded run** — the recorded run (2026-10-18, T4, float32) equals the CPU float32 build at printed precision, so the default path should '
+        'reproduce it; if a number differs, read `settings_differing` and the package versions Section 2 prints. The comparison between systems is the result.\n- **BYOD: a column or record refusal** — the message names the rule: columns `id`, `query`, `positive`, '
         '`negatives` (separated by ` | `), 1..15 distinct negatives per record; set `INSTRUCTION` to describe your relevance judgement.\n- '
         '**BYOD: "the dataset has N distinct queries … 12..10002 distinct queries are required"** — the split keeps 20 % for test and 15 % for '
         'validation and needs 8 for training, and each evaluated split is scored in one call of at most 2,000 records: add records, or split a larger '
