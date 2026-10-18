@@ -142,6 +142,7 @@ A known-failing default path in the supported runtime blocks release (REL11).
 
 | Notebook | Commit / notebook blob | Date (UTC) | Executor | Outcome |
 |---|---|---|---|---|
+| `qwen3_reranker_colab.ipynb` (`E2E`) | `ff6da3a` / `2d6e5607` | 2026-10-18 | Colab CLI 0.7.4, fresh Colab Tesla T4 (session `suite-qwen3-ff6da3a-745f`; CLI sequential execution, not a browser Run all; `torch 2.14.0+cu130`, `transformers 4.57.6`, `cuda:0`, float32) | **PASSED — REL13 pre-registered evaluation of record**: 13/13 code cells, 0 errors, no restart, 995.4 s; fresh test (385) recall@1 0.7455 → 0.7922, MRR 0.851 → 0.879 (paired Δ MRR +0.0279, 95 % CI 0.0086 to 0.0476); see *Hosted T4 evaluation of record* below; evidence `docs/execution-evidence/2026-10-18-ff6da3a/` |
 | `qwen3_reranker_colab.ipynb` (`E2E`) | `995cd8e` / `99efdc6a` | 2026-09-19 | Kaggle Tesla T4 (`kurtvalcorza/dimer-nb2-qwen3-reranker` v3; image `torch 2.10.0+cu128` / `transformers 5.0.0` before the pinned install, `torch 2.14.0+cu130` / `transformers 4.57.6` after, Python 3.12.13, `cuda:0`) | **PASSED** — 11/11 code cells ok (1 restart after install cell); 30 files, 1209 MB staged from the Hub into a clean cache; comparison {recall@1: {random_floor: 0.1667, lexical: 0.2662, frozen: 0.7338, adapted: 0.7662}, recall@3: {random_floor: 0.5, lexical: 0.4156, frozen: 0.9416, adapted: 0.9545}, recall@5: {random_floor: 0.8333, lexical: 0.7532, frozen: 0.9935, adapted: 0.9935}, mrr: {random_floor: 0.4083, lexical: 0.457, frozen: 0.8429, adapted: 0.8634}, median_rank: {lexical: 4, frozen: 1, adapted: 1}, delta_vs_frozen: {recall@1: 0.0325, recall@3: 0.013, recall@5: 0, mrr: 0.0206}}; reload parity {scores_identical: True, mrr_in_memory: 0.9125, mrr_reloaded: 0.9125}; run summary and executed notebook archived under `.agent/backups/kaggle-e2e-2026-09-19/out/dimer-nb2-qwen3-reranker/v3/evidence/` in the workspace |
 | `qwen3_reranker_colab.ipynb` (`E2E`) | `d79994f` / `75fbc7d7` | 2026-09-19 | Local pre-flight harness (Windows, CPython 3.12.10, CPU, `google.colab` shim, pins pre-installed) | PASS — pre-flight only, **not** promotion evidence |
 | `qwen3_reranker_colab.ipynb` (`TASK-INFERENCE`, superseded) | `0c652a2` / `a21e5a860c0f` | 2026-09-14 | Kaggle T4 (`kurtvalcorza/dimer-nb2-qwen3-reranker` v2) | PASSED — 8/8 code cells, 236.4 s (1 restart after the install cell), 1,207 MB staged; evidence for the earlier inference-only notebook, not for the `E2E` blob |
@@ -155,6 +156,7 @@ general estimates.
 
 | Date (UTC) | Commit / notebook blob | Executor | Path exercised | Wall | Outcome |
 |---|---|---|---|---|---|
+| 2026-10-18 (00:21:48 UTC start) | commit `ff6da3a` / blob `2d6e5607e1354f209ff862a34d798810c6093d54` (`NOTEBOOK_SOURCE.repository_revision` `003e228`; generator `build_notebook.py/2.2`, `notebook_spec` 2.5) | Colab CLI 0.7.4 sequential execution (`colab exec -f`, not a browser Run all; order from `exec.log`, no execution counts), fresh Colab VM (session `suite-qwen3-ff6da3a-745f`), Tesla T4; blob fetched at the 40-char SHA and Git-blob verified, no repository checkout; kernel Python 3.13.15; uv isolated environment CPython 3.12.12 (47 locked packages, 52 s); `torch 2.14.0+cu130`, `transformers 4.57.6`, `cuda:0`, float32 | Default sample path only (`USE_BYOD = False`, default form values, `RUN_GRID = True`); 13 snapshot files fetched and digest-verified | 995.4 s | **PASSED — REL13 pre-registered evaluation of record** (`test_look` "pre-registered evaluation (this runtime)", `settings_differing` []): 13/13 code cells, 0 errors; grid kept-epoch validation MRR 0.9165 / 0.9232 / 0.9229 → 2e-5; re-train 0.92316 both; fresh test (385) frozen 0.7455 / 0.851, adapted 0.7922 / 0.879 (recall@1 / MRR), Δ MRR +0.0279 [0.0086, 0.0476], Δ recall@1 +0.0468 [0.0130, 0.0805]; exposed development test adapted 0.7792 / 0.8725; reload parity exact (0.975); adapter 125,850,032 B. Evidence [`docs/execution-evidence/2026-10-18-ff6da3a/`](execution-evidence/2026-10-18-ff6da3a/): executed notebook SHA-256 `32d7ced5a4bda2ce215e75d6cd7f1e7c7ba14792d1326187cd5e4383ca18a2bc`, `run_summary.json` `276969abdb2c5619c9bdcf3b0daa11a6787e8881dc78f1e359739e4b07d3d901`, `exec.log` captured `e3eeb766…`, committed (home-directory prefix replaced) `c6870306…`. Not exercised: BYOD (REL12), the activity and the optional experiments, a browser Run all |
 | 2026-10-09 (02:49:17 UTC start) | commit `d064746` / blob `93f1a9d552131fc1382151ce1a7e99261ea0cfb6` (`NOTEBOOK_SOURCE.repository_revision` `c628da8`, the source revision the notebook was generated from; `c628da8..d064746` is the review-fix commit; generator `build_notebook.py/2.2`, `notebook_spec` 2.2) | Colab CLI 0.7.4 sequential execution (`colab exec -f`, not a browser Run all; order from `exec.log`, no execution counts), fresh Colab VM (session `suite-qwen3-d064746-745f`), Tesla T4; committed blob fetched at the 40-char SHA and Git-blob verified, no repository checkout; kernel Python 3.13.15; uv isolated environment CPython 3.12.12 (47 locked packages, built in 75 s), `torch 2.14.0+cu130`, `transformers 4.57.6`, `cuda:0`, bfloat16 | Default sample path only (`USE_BYOD = False`, default form values); 13 snapshot files fetched from the Hub and digest-verified | 513.7 s | **PASSED — one pass, no restart, 0 errors**: 12/12 code cells (the three carried-module cells print nothing); splits 231 / 77 / 154, four refusal probes rejected; ceilings print `TRAIN_CANDIDATES_RANGE` (2, 8) and `MAX_EVAL_RECORDS` 2000 with `TRAIN_CANDIDATES` 4 as the default; random floor recall@1 0.1667 / MRR 0.4083; lexical 0.2662 / 0.457 (recall@3 0.4156 below the 0.5 floor, recall@5 0.7532 below 0.8333); frozen 0.7338 / 0.8429 (`adapted: False`, 46.7 s); validation MRR 0.8699 → 0.8872 → 0.8937, best epoch 2 (`started_from` pinned base, 229.0 s); adapted 0.7662 / 0.8634 (Δ recall@1 +0.0325, MRR +0.0206, recall@5 0.9935 unchanged, verdict *improved*); 2 of 3 probe shortlists reordered, gold rank 1 in all; adapter 22 tensors, 62,926,256 B; reload parity exact (scores identical, MRR 0.9125 both ways); six exports. These match the worked answers. Evidence [`docs/execution-evidence/2026-10-09-d064746/`](execution-evidence/2026-10-09-d064746/): executed notebook SHA-256 `1b087bd151ea134ca42b2c65b40a9c891c11a7bfa4c18b4f60ca153a12137562`, `run_summary.json` `eace86e87a65159011b8651fcbcd44de0640cc65a8007f124ae95a5b3761d9ac`, `exec.log` as captured `a0f70489b797baf860ce599b029a9b117fa56c708c133e7cf153f5b0e191e734` (the blob before `9ed7d8a`); redacted 2026-10-17 in commit `9ed7d8a`, where one string class (a local home-directory prefix, replaced by `<local-run-dir>/` on lines 1 and 65) was replaced and nothing else changed, giving `17ed4e1bb33ec525c069b8c4abae09f98c2bda08bb274cfaa727087103fa1b3a` (verified: applying only that substitution to the captured file reproduces this hash). Not exercised: BYOD (REL12), the activity and the optional experiments, a browser Run all |
 | 2026-09-19 | `995cd8e` / `99efdc6a` | Kaggle Tesla T4 (`kurtvalcorza/dimer-nb2-qwen3-reranker` v3; image `torch 2.10.0+cu128` / `transformers 5.0.0` before the pinned install, `torch 2.14.0+cu130` / `transformers 4.57.6` after, Python 3.12.13, `cuda:0`) | Default sample path, `Run all` from a fresh interpreter with an empty Hugging Face cache and no repository checkout (blob SHA-1 verified against GitHub before execution) | 588.2 s | **PASSED** — 11/11 code cells ok (1 restart after install cell); 30 files, 1209 MB staged from the Hub into a clean cache; comparison {recall@1: {random_floor: 0.1667, lexical: 0.2662, frozen: 0.7338, adapted: 0.7662}, recall@3: {random_floor: 0.5, lexical: 0.4156, frozen: 0.9416, adapted: 0.9545}, recall@5: {random_floor: 0.8333, lexical: 0.7532, frozen: 0.9935, adapted: 0.9935}, mrr: {random_floor: 0.4083, lexical: 0.457, frozen: 0.8429, adapted: 0.8634}, median_rank: {lexical: 4, frozen: 1, adapted: 1}, delta_vs_frozen: {recall@1: 0.0325, recall@3: 0.013, recall@5: 0, mrr: 0.0206}}; reload parity {scores_identical: True, mrr_in_memory: 0.9125, mrr_reloaded: 0.9125}; run summary and executed notebook archived under `.agent/backups/kaggle-e2e-2026-09-19/out/dimer-nb2-qwen3-reranker/v3/evidence/` in the workspace |
 | 2026-09-19 | `d79994f` / `75fbc7d7` | Local pre-flight harness (Windows, CPython 3.12.10, CPU float32, `torch 2.14.0+cu130` with `CUDA_VISIBLE_DEVICES=-1`, `transformers 4.57.6`) | Default sample path (install skipped, pins pre-installed → three carried modules → inline manifest assert → `stage_missing_files` fetched 0 of 13 entries because the snapshot was pre-staged → `verify_snapshot` 13 files → `from_pretrained` on CPU with the `yes`/`no` ids checked → `fetch_corpus` served from the pre-staged cache after its digest checks → 10,003 + 3,080 rows read, 231 / 77 / 154 drawn over 77 intents with six candidates per query, `check_split_disjoint` clean and digests `6a5c384c…` / `32cc0b97…` / `a67a92bd…` → four dataset refusals → input manifest with the empty-document refusal → `rerank` on the first test shortlist (gold `extra charge on statement` scored 0.9697 and ranked first; 0.85 s, 95–98 tokens per pair) with all five sanity checks `True` → three shortlists ordered → random floor → lexical baseline → frozen evaluation → `adapt` → validation + test evaluation → orderings after adaptation → adapter export → reload parity) | 925.2 s | **PASSED** — 11/11 code cells; random floor recall@1 16.7 % / MRR 0.408; lexical baseline recall@1 26.6 %, recall@3 41.6 % (below the random floor: ties count against the positive and the hard negatives share its tokens), MRR 0.457, median rank 4; frozen test recall@1 73.4 %, recall@3 94.2 %, recall@5 99.4 %, MRR 0.843, median rank 1 (924 pairs, 131.7 s); `adapt` 31,461,888 of 595,776,512 params, 231 shortlists (924 training pairs), 2 epochs, 537.0 s incl. three 462-pair validation passes, validation MRR 0.881 → 0.902 → 0.923 (recall@1 79.2 → 83.1 → 85.7 %; `best_epoch` 2, train loss 0.799 → 0.669); **adapted test recall@1 77.9 %, recall@3 96.1 %, recall@5 99.4 %, MRR 0.873 (Δ +4.5 / +1.9 / 0.0 points, +0.030 MRR)** (129.2 s); the three probe shortlists kept the gold first before and after while the order below it changed and the gold scores moved (0.9697 → 0.9365, 0.2088 → 0.4085, 0.1343 → 0.0548); per-batch report `not-measurable`; adapter 125,850,032 B / 22 tensors, SHA-256 `9026a0ab…`; reload parity exact (probe scores identical, 20-shortlist validation MRR 0.975 both ways); six exports written. Pre-flight; hosted clean-runtime run still required |
@@ -167,13 +169,13 @@ The row 73 tutorial review found that the default learning rate had been kept ov
 now the **exposed development test**; `docs/qwen3-reranker-preregistration.md` (committed alone, before any run)
 fixes the grid, the fresh test, the tie policy and the scoring rules.
 
-- **Evaluation of record:** none yet. The first hosted T4 run of the regenerated notebook with the pre-registered
-  settings is THE evaluation; later identical hosted runs are reproductions. Record it here (date, commit, blob,
-  runtime, grid table, fresh-test numbers with their bootstrap CIs). `protocol.RECORDED_EVALUATION` is set only by
-  the requote that follows that hosted T4 run, and this file names the run of record; a reproduction is defined by
-  identical pre-registered settings and module code except `RECORDED_EVALUATION` (amendment 1, section 10). The record
-  is a cuda run with **float32 training** (amendment 2); earlier hosted numbers came from bfloat16 training, stay
-  labelled bfloat16 and are not comparable to it.
+- **Evaluation of record (REL13):** the hosted Colab T4 run of 2026-10-18, commit `ff6da3a`, blob `2d6e5607`, cuda
+  float32 — section *Hosted T4 evaluation of record* below. It is the first hosted T4 run of the regenerated notebook with
+  the pre-registered settings and the first scoring of the fresh test by any model; later identical hosted runs are
+  reproductions. `protocol.RECORDED_EVALUATION` is still `None` at this blob: it is set only by the requote that follows
+  this run, and a reproduction is defined by identical pre-registered settings and module code except
+  `RECORDED_EVALUATION` (amendment 1, section 10). Earlier hosted numbers came from bfloat16 training, stay labelled
+  bfloat16 and are not comparable to it.
 - **Amendment 2 (2026-10-18, `docs/qwen3-reranker-preregistration-amendment-2.md`, committed alone in `3d84c35`):** the
   whole model loads, runs and trains in float32 on CUDA as on CPU (AdamW on bfloat16 parameters had no float32 master
   copy). T4 estimate: about 4 min per two-epoch `adapt`, 25–35 min for the whole path, about 7–9 GB peak of 16 GB;
@@ -222,9 +224,119 @@ bfloat16 run of blob `93f1a9d5`, the new one this CPU float32 check):
 `evaluate_base` check: the base scored with `adapted: False` and the adapter kept afterwards (20-query validation MRR
 0.9125 base, 0.975 adapted). The fresh-test numbers belong to the first hosted pre-registered run.
 
+### 2026-10-18 hosted T4 evaluation of record (blob `2d6e5607`, PR #10 head `ff6da3a`)
+
+**REL13: pre-registered evaluation of record.** This is the first hosted run of the pre-registered settings under
+amendment 2 (float32 training) and the first scoring of the fresh test by any model (the CPU check above masked it; the
+only earlier look was the parameter-free lexical tie count). Later hosted runs with identical settings are
+reproductions; a run with any other setting is exploratory and never scores the fresh test.
+
+- **Files.** [`docs/execution-evidence/2026-10-18-ff6da3a/`](execution-evidence/2026-10-18-ff6da3a/): executed notebook
+  (SHA-256 `32d7ced5a4bda2ce215e75d6cd7f1e7c7ba14792d1326187cd5e4383ca18a2bc`) and `run_summary.json`
+  (`276969abdb2c5619c9bdcf3b0daa11a6787e8881dc78f1e359739e4b07d3d901`), byte for byte (`-text`); `exec.log` as captured
+  `e3eeb766fdccea39e8f772fb5580cc26f90f000f066d590b415be852297f897e`, committed with one string class replaced (the local
+  home-directory prefix, replaced by `<local-run-dir>/` on lines 1 and 76, as in `9ed7d8a`) and nothing else changed:
+  `c687030600346ae970fdb98d43fd25ab0b2ee7b187b8bc1b0f10b399410c3692`.
+- **Source match.** The fetched notebook's `git hash-object` is `2d6e5607e1354f209ff862a34d798810c6093d54`, the blob at
+  `ff6da3a`, and it is byte-equal to the committed file. All 36 executed cells have the same ids and order, with no source
+  differences and no `# @param` edits. `NOTEBOOK_SOURCE.repository_revision` `003e228`, `module_sha256` `413253e4…`,
+  generator `build_notebook.py/2.2`, spec 2.5.
+- **Executor.** Colab CLI 0.7.4 (`colab exec -f`) on a fresh Colab VM, Tesla T4 (session `suite-qwen3-ff6da3a-745f`,
+  started 2026-10-18 00:21:48 UTC). This is sequential CLI execution, not a browser Run all: forms and uploads were not
+  exercised, and the file has no execution counts (order from `exec.log`, cells 1..13). Kernel Python 3.13.15; uv
+  isolated environment CPython 3.12.12, 47 locked packages, built in 52 s; `torch 2.14.0+cu130`, `transformers 4.57.6`;
+  `cuda:0`, **float32** (printed by Section 8 and in the fresh-test block).
+- **Execution.** 13/13 code cells (the three carried-module cells print nothing), 0 error outputs, no restart, session wall
+  995.4 s. 13 snapshot files (1,207,486,774 B) fetched from the Hub and digest-verified. Grid 144.7 + 150.5 + 150.2 s;
+  Section 7 total 595.6 s (selected re-train about 150 s); exposed frozen evaluation 31.9 s.
+- **Pre-registration.** `settings_differing` [], `test_look` "pre-registered evaluation (this runtime)", evaluated system
+  `adapted` (lr 2e-5), re-train check 0.92316 against the grid run's 0.92316 (difference 0.0, tolerance 0.010).
+
+**Validation grid (77 queries).**
+
+| lr | Val MRR by epoch (0 = frozen) | Kept epoch | Kept val MRR | Seconds |
+|---|---|---|---|---|
+| 1e-5 | 0.8807 / 0.9002 / 0.9165 | 2 | 0.9165 | 144.7 |
+| **2e-5** | 0.8807 / 0.9019 / 0.9232 | 2 | **0.9232** | 150.5 |
+| 5e-5 | 0.8807 / 0.9229 / 0.9080 | 1 | 0.9229 | 150.2 |
+
+Selection **2e-5** ("no challenger beat 2e-05 by 0.01": 1e-5 −0.0067, 5e-5 −0.0003); adaptation kept (+0.0425 over
+frozen 0.8807, margin 0.010). Selected re-train: validation recall@1 0.7922 → 0.8312 → 0.8571, recall@3 0.961 → 0.974 →
+0.987, MRR 0.8807 → 0.9019 → 0.9232, train loss 0.7989 → 0.6694, best epoch 2.
+
+**Fresh test (385 shortlists, digest `9bc26a46…`), the evaluation of record.** Pessimistic ranks (ties count against the
+positive); the tie-expected values are equal for both models because no model score tied the positive (`ties_with_positive`
+0 and 0).
+
+| System | Recall@1 | Recall@3 | Recall@5 | MRR | 95 % CI, MRR | 95 % CI, recall@1 |
+|---|---|---|---|---|---|---|
+| Random floor | 0.1667 | 0.5 | 0.8333 | 0.4083 | (an expectation) | — |
+| Lexical | 0.3299 | 0.4597 | 0.8104 | 0.5069 | 0.4711 to 0.5428 | 0.2831 to 0.3766 |
+| Lexical, tie-expected (175 ties) | 0.381 | 0.5888 | 0.9335 | 0.5644 | — | — |
+| Frozen | 0.7455 | 0.9506 | 0.9974 | 0.851 | 0.8240 to 0.8765 | 0.7013 to 0.7870 |
+| Adapted (2e-5) | 0.7922 | 0.974 | 0.9948 | 0.879 | 0.8544 to 0.9019 | 0.7506 to 0.8312 |
+
+Adapted − frozen (paired bootstrap over the 385 shortlists, 10,000 resamples, seed 20261018, percentile intervals):
+MRR **+0.0279, 95 % CI 0.0086 to 0.0476**; recall@1 **+0.0468 (18 / 385), 95 % CI 0.0130 to 0.0805**. Both intervals
+exclude 0; verdict *improved* for both. Recall@5 falls by one shortlist (384 → 383). The intervals cover only the choice
+of shortlists, not split-to-split or seed-to-seed variation.
+
+Re-derived from the printed values (the per-query ranks stayed on the released VM, so the bootstrap was not re-run):
+every recall × 385 is a whole count (frozen 287 / 366 / 384, adapted 305 / 375 / 383, lexical 127 / 177 / 312); each MRR
+lies inside the bounds its recall@1/3/5 allow for six candidates; the floor is H₆ / 6 = 0.4083; every bootstrap endpoint
+is a whole multiple of 1 / 385 (recall@1) or 1 / 23,100 (MRR), as resamples of 385 shortlists must be; the marginal
+recall@1 intervals agree with the normal approximation to within 0.002; and the paired recall@1 interval implies about 31
+shortlists improved and 13 worse at rank 1. The lexical tie count (175 / 385) equals the disclosed development look.
+
+**Exposed development test (154; not independent — an earlier learning-rate choice was made on it).** Random floor
+0.1667 / 0.4083, lexical 0.2662 / 0.457 (tie-expected 0.3335 / 0.5301, 86 ties), frozen 0.7338 / 0.8429, adapted 0.7792 /
+0.8725 (recall@1 / MRR; recall@3 0.9416 → 0.961, recall@5 0.9935 both; Δ recall@1 +0.0455, Δ MRR +0.0297; model ties 0).
+This split prints no interval.
+
+**Against the CPU development check (float32, fresh test masked, `488c954`).** Every number both runs print is equal at
+printed precision:
+
+| Measure | CPU development check | Hosted T4 record | Difference |
+|---|---|---|---|
+| Grid val MRR by epoch, 1e-5 / 2e-5 / 5e-5 | 0.8807/0.9002/0.9165; 0.8807/0.9019/0.9232; 0.8807/0.9229/0.9080 | same | 0 |
+| Kept epochs / selection / adaptation kept | 2, 2, 1 / 2e-5 / yes | same | none |
+| Selected re-train val MRR / recall@1 | 0.9232 / 0.8571 | 0.9232 / 0.8571 | 0 |
+| Exposed lexical, frozen, adapted (all metrics, both tie policies, tie counts) | table above | same | 0 |
+| 20-query validation MRR, adapted (CPU `evaluate_base` check; T4 reload parity) | 0.975 | 0.975 | 0 |
+| Grid seconds 1e-5 / 2e-5 / 5e-5 | 1,043 / 712 / 599 | 144.7 / 150.5 / 150.2 | device |
+| Fresh test | masked | scored (above) | — |
+
+The grid selection matches. The CPU check scored no model on the fresh test, so there is nothing there to compare.
+
+**Against the bfloat16 hosted runs.** The 2026-10-09 run of blob `93f1a9d5` (bfloat16 training): frozen validation MRR
+0.8699 → now 0.8807; exposed adapted 0.7662 / 0.8634 → 0.7792 / 0.8725; exposed frozen 0.7338 / 0.8429 equal; reload
+parity 0.9125 → 0.975; adapter 62,926,256 → 125,850,032 B (float32: 31,461,888 parameters × 4 B plus a 2,480 B header).
+The aborted selection-only look at `b669f41` (bfloat16, disclosed above, no fresh-test number) gave lr 1e-5 0.8699 /
+0.8786 / 0.8872; float32 gives 0.8807 / 0.9002 / 0.9165. Float32 on CUDA removed the CPU/T4 gap.
+
+**Measured against the amendment 2 estimate.**
+
+| Quantity | Estimate (fixer, amendment 2) | Measured | Reading |
+|---|---|---|---|
+| One two-epoch `adapt` (incl. validation passes) | about 4 min | 144.7–150.5 s (2.4–2.5 min) | faster |
+| Whole path | 25–35 min | 995.4 s session wall (16.6 min, incl. the 52 s environment build and the 1.2 GB download) | faster |
+| Peak GPU memory | about 7–9 GB of 16 | not measured (the notebook prints no memory figure) | open |
+
+**Evidence boundary.** Default path only, by CLI sequential execution. BYOD (REL12), the activity and the optional
+experiments were not run. The `outputs/` files stayed on the released VM, so their bytes (per-query ranks, the evaluation
+report) were not inspected.
+
+| Journey | Verdict |
+|---|---|
+| Clean default path (isolated env, no restart; CLI sequential) | PASS |
+| Activity / optional experiments | not assessed in this run |
+| BYOD | not assessed in this run |
+
+Status stays **Candidate**.
+
 ## Current status
 
-**Candidate.** The `E2E` notebook blob `99efdc6a` (committed at `995cd8e`) executed top-to-bottom in a clean Kaggle Tesla T4 runtime on 2026-09-19 (11/11 ok, 588.2 s, 30 files, 1209 MB fetched from the Hub and digest-verified inside the notebook) with no repository checkout, but it needed **one manual restart after the install cell** (pass 1 raised the stale-import guard after the in-kernel pip install). A restart-assisted run does not meet the no-restart gate (RUN10/ENV6), so that record is history, not release evidence; the earlier "Release-grade" label is withdrawn.
+**Candidate.** 2026-10-18: blob `2d6e5607` (commit `ff6da3a`, amendment 2, float32 on every device) completed one pass with no restart and 0 errors on a fresh Colab Tesla T4 (Colab CLI sequential execution, 13/13 code cells, 995.4 s). It is the REL13 pre-registered evaluation of record: fresh test (385) MRR 0.851 → 0.879, paired Δ +0.0279 (95 % CI 0.0086 to 0.0476), recall@1 0.7455 → 0.7922 (Δ +0.0468, CI 0.0130 to 0.0805). BYOD on a hosted runtime (REL12) and the activity were not run, so status stays **Candidate** (REL14). History: the `E2E` notebook blob `99efdc6a` (committed at `995cd8e`) executed top-to-bottom in a clean Kaggle Tesla T4 runtime on 2026-09-19 (11/11 ok, 588.2 s, 30 files, 1209 MB fetched from the Hub and digest-verified inside the notebook) with no repository checkout, but it needed **one manual restart after the install cell** (pass 1 raised the stale-import guard after the in-kernel pip install). A restart-assisted run does not meet the no-restart gate (RUN10/ENV6), so that record is history, not release evidence; the earlier "Release-grade" label is withdrawn.
 
 ### 2026-10-09 review fixes (RR-M1..M4, RR-m1..m6)
 
