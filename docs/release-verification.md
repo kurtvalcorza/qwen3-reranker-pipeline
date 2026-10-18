@@ -59,7 +59,7 @@ checks. They are **not** execution evidence.
 
 | Path | Runtime | Role |
 |---|---|---|
-| Google Colab (supported user path) | Colab CPU runtime (CUDA used automatically when present; bfloat16 there, float32 on CPU) | The runtime the tutorial is written for; a clean top-to-bottom run here is promotion evidence |
+| Google Colab (supported user path) | Colab CPU runtime (CUDA used automatically when present; float32 on every device since amendment 2) | The runtime the tutorial is written for; a clean top-to-bottom run here is promotion evidence |
 | Kaggle CLI kernel or equivalent fresh container | Fresh CPU or GPU container, Python 3.12 image; the committed notebook executed verbatim in a fresh interpreter with a `google.colab` shim and **no repository checkout** (the notebook is standalone) | Reproducible clean-room executor of the same class; needed whenever the hosted kernel pre-imports a NumPy or torch that differs from the `pyproject.toml` pins, because the tutorial's fail-closed stale-import guard correctly halts the in-kernel path after the pinned install |
 | Local harness (pre-flight only) | Workstation, sequential cell executor with a `google.colab` shim, pre-staged pins, `CUDA_VISIBLE_DEVICES=-1` | Builder pre-flight to catch defects before spending cloud runs; **not** a supported runtime and **not** promotion evidence |
 
@@ -172,7 +172,17 @@ fixes the grid, the fresh test, the tie policy and the scoring rules.
   runtime, grid table, fresh-test numbers with their bootstrap CIs). `protocol.RECORDED_EVALUATION` is set only by
   the requote that follows that hosted T4 run, and this file names the run of record; a reproduction is defined by
   identical pre-registered settings and module code except `RECORDED_EVALUATION` (amendment 1, section 10). The record
-  is a cuda/bfloat16 run; CPU float32 scorings are labelled with their dtype and are not comparable to it.
+  is a cuda run with **float32 training** (amendment 2); earlier hosted numbers came from bfloat16 training, stay
+  labelled bfloat16 and are not comparable to it.
+- **Amendment 2 (2026-10-18, `docs/qwen3-reranker-preregistration-amendment-2.md`, committed alone in `3d84c35`):** the
+  whole model loads, runs and trains in float32 on CUDA as on CPU (AdamW on bfloat16 parameters had no float32 master
+  copy). T4 estimate: about 4 min per two-epoch `adapt`, 25–35 min for the whole path, about 7–9 GB peak of 16 GB;
+  the first hosted run measures it. Grid, margins, fresh test, bootstrap and score-once rules unchanged.
+- **Aborted selection-only hosted look (2026-10-18):** a hosted T4 run of revision `b669f41` (bfloat16 training) was
+  stopped by the orchestrator in Section 7, during the grid and before Section 8. It printed Section 6's
+  exposed-development numbers and the T4 grid run for lr 1e-5 (kept-epoch validation MRR 0.8872; 0.8699 / 0.8786 /
+  0.8872 by epoch). No fresh-test number exists. It is a validation look under the superseded precision and chooses
+  nothing.
 - **Amendment 1 (2026-10-18, `docs/qwen3-reranker-preregistration-amendment-1.md`, committed alone in `3eb2c57`):**
   paired bootstrap CIs, the exposed test no longer stops Section 8, device/dtype recorded, the re-train check, the
   fingerprint from the adapter, the margin's meaning, the T73-9 fallback disclosure and timings.
