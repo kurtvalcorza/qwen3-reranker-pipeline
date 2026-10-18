@@ -242,9 +242,10 @@ def test_rr_m4_activity_follows_the_five_steps(notebook):
 def test_rr_m1_quoted_figures_name_their_device(notebook):
     md = _markdown(notebook)
     assert "+4.5 points in a few minutes on CPU" not in md and "a 126 MB adapter" not in md
-    # T73-4 (REL13): worked answers name the hosted run of blob 93f1a9d5; the device gap is stated as 1-2 points.
+    # T73-4 (REL13), requoted 2026-10-18: worked answers name the float32 evaluation of record (blob 2d6e5607); the
+    # earlier bfloat16 device gap is history (1-2 points).
     assert "Kaggle Tesla T4 run of 19 September 2026" not in md and "differ in the last digits" not in md
-    assert "the Colab T4 run of notebook blob `93f1a9d5` (commit `d064746`, 9 October 2026" in md
+    assert "the hosted Colab T4 run of notebook blob `2d6e5607` (commit `ff6da3a`, 18 October 2026" in md and "93f1a9d5" not in md
     assert "by up to one or two points of recall@1" in md
     assert "held-out recall@1" not in md and "the default keeps 2e-5" not in md
     assert "about 126 MB in float32 on every device" in md and "63 MB in bfloat16" not in md  # amendment 2

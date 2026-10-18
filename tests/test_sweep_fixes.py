@@ -148,7 +148,8 @@ def test_swp_g_guided_layer_is_present_and_infrastructure_is_collapsed(notebook)
 
 def test_swp_g_checkpoint_answers_quote_the_recorded_run(notebook):
     md = _markdown(notebook)
-    for value in ("0.7338", "0.7662", "0.2662", "0.4156", "0.8429", "0.8634", "0.9125"):
+    # the float32 evaluation of record of 2026-10-18 (ff6da3a): exposed adapted 0.7792 / 0.8725, reload parity 0.975
+    for value in ("0.7338", "0.7792", "0.2662", "0.4156", "0.8429", "0.8725", "0.975"):
         assert value in md, value
 
 

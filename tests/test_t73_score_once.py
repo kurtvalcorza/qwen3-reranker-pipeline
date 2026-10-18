@@ -262,7 +262,7 @@ def test_t73_r2_f2_report_is_written_and_exposed_test_never_stops(notebook, tmp_
     (tmp_path / "outputs").mkdir()
     source = _cell(notebook, "delta_mrr = ")
     assert source.index("fresh_systems = ") < source.index("json.dump(evaluation_report_payload") and "raise RuntimeError" not in source[source.index("fresh_systems = "):]
-    ns, fresh_calls = _section_8(notebook, tmp_path, exposed_adapted=(0.6, 0.70))  # adapted worse than frozen on the exposed test
+    ns, fresh_calls = _section_8(notebook, tmp_path, exposed_adapted=(0.6, 0.70), RECORDED_EVALUATION=None)  # adapted worse than frozen on the exposed test
     assert ns["comparison"]["verdict"]["adapted_vs_frozen_mrr"] == "worse" and fresh_calls == ["frozen", "adapted"]
     report = json.loads((tmp_path / "outputs" / "qwen3_reranker_evaluation_report.json").read_text(encoding="utf-8"))
     assert report["fresh_test"]["n_queries"] == 3 and report["fresh_test"]["bootstrap"]["n_boot"] == metrics.BOOTSTRAP_RESAMPLES
@@ -309,7 +309,7 @@ def test_t73_r2_prose_amendment_items(notebook):
     md = _markdown(notebook)
     assert "**paired bootstrap 95 % CI**" in md and "decides nothing — no stop reads a test split" in md
     assert "is trained **again**" in md and "*keep the default unless clearly beaten*" in md
-    assert "10 / 385 fresh" in md and "about 11.5 minutes on a T4" in md and "75 minutes or more" in md
+    assert "10 / 385 fresh" in md and "7.4 minutes, 445 s, on the recorded T4 run" in md and "75 minutes or more" in md
     assert "give no dispersion estimate" not in md and "7–8 minutes" not in md
     assert (ROOT / "docs" / "qwen3-reranker-preregistration-amendment-1.md").is_file()
 
