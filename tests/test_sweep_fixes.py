@@ -12,6 +12,7 @@ import importlib.util
 import json
 import re
 import sys
+import textwrap
 import types
 from pathlib import Path
 
@@ -26,7 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
 NOTEBOOK = ROOT / "tutorials" / "qwen3_reranker_colab.ipynb"
 LOCK = ROOT / "tutorials" / "requirements-colab.lock.txt"
 PIPELINE = ROOT / "src" / "qwen3_reranker_pipeline" / "pipeline.py"
-BYOD_END = "else:\n    corpus = read_corpus("
+BYOD_END = "    else:\n        corpus = read_corpus("  # DAT20: the branch sits inside the refusal wrap
 
 
 @pytest.fixture(scope="module")
@@ -257,8 +258,10 @@ def test_swp_f_restore_base_puts_trained_tensors_back_and_detaches_the_adapter()
 
 
 def _byod_block(notebook: dict) -> str:
+    # DAT20: the refusal helpers, then the BYOD branch from inside the refusal wrap (dedented).
     source = _cell(notebook, "if USE_BYOD:")
-    return source[source.index("if USE_BYOD:") : source.index(BYOD_END)]
+    helpers = source[source.index("class BYODRefusal(ValueError):") : source.index("# DAT20: with USE_BYOD")]
+    return helpers + textwrap.dedent(source[source.index("    if USE_BYOD:\n") : source.index(BYOD_END)])
 
 
 def _byod_namespace(path: str) -> dict:
@@ -282,9 +285,9 @@ def test_swp_b_byod_path_reads_a_file_without_colab(notebook, tmp_path, monkeypa
 def test_swp_b_missing_path_and_off_colab_upload_give_clear_messages(notebook, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setitem(sys.modules, "google.colab", None)
-    with pytest.raises(FileNotFoundError, match="BYOD_PATH 'nope.csv' is not a file"):
+    with pytest.raises(ValueError, match="^nope.csv: BYOD_PATH 'nope.csv' is not a file"):
         exec(compile(_byod_block(notebook), "<byod>", "exec"), _byod_namespace("nope.csv"))
-    with pytest.raises(RuntimeError, match="upload dialog exists only in Google Colab"):
+    with pytest.raises(ValueError, match="upload dialog exists only in Google Colab"):
         exec(compile(_byod_block(notebook), "<byod>", "exec"), _byod_namespace(""))
 
 
