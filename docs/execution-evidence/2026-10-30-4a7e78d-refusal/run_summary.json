@@ -1,0 +1,72 @@
+{
+  "repo": "qwen3-reranker-pipeline",
+  "sha": "4a7e78dcf8587b64432bb900a7f395ae723e33f6",
+  "notebook": "tutorials/qwen3_reranker_colab.ipynb",
+  "blob": "e8889991eff46d746b42d87aea8259594193130c",
+  "gpu": "T4",
+  "session": "suite-qwen3-4a7e78d-745f",
+  "started_utc": "2026-10-30T18:54:47+00:00",
+  "runner": "Colab CLI `colab exec -f` on a fresh session (not a browser Run all)",
+  "overrides": [
+    {
+      "name": "USE_BYOD",
+      "from": "False",
+      "to": "True"
+    },
+    {
+      "name": "BYOD_PATH",
+      "from": "''",
+      "to": "'/content/sample_data/california_housing_test.csv'"
+    }
+  ],
+  "run_copy_blob": "34a78b0f582f34106deb1976300372aec68b7b53",
+  "run_copy_sha256": "5a67c403ef0c9d7ae55545004ca0da11e4000eafb918ee7166791029d78c7a47",
+  "run_copy_note": "refusal run: the run copy is the committed notebook with the listed assignment overrides, cut immediately after the refusal cell and re-serialised (nbformat layout); input_unchanged compares against that copy",
+  "truncated_after_cell": "qwen3_reranker-18",
+  "refusal_cell_ref": "qwen3_reranker-18",
+  "refusal_cell_index": 8,
+  "cells_dropped": 17,
+  "code_cells_dropped": 5,
+  "original_sha256": "94d970915fea19c4e471a3ae4f4be14192f2cbfbaa475e8bcac1aac027f0105f",
+  "status": "[suite-qwen3-4a7e78d-745f] gpu-t4-s-usw4a3-23wlps6a75n1v | Hardware: T4 | Shape: Standard | Variant: GPU | Status: IDLE",
+  "exec_exit_code": 0,
+  "stopped": true,
+  "stop_verified": true,
+  "wall_s": 108.2,
+  "input_unchanged": true,
+  "executed_file": "qwen3_reranker_colab_4a7e78d_colab-cli-t4_output.ipynb",
+  "log_cells": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "log_total": 8,
+  "code_cells": 8,
+  "executed_cells": 4,
+  "errors": [
+    {
+      "cell": "qwen3_reranker-18",
+      "ename": "IsolatedCellRefusal",
+      "evalue": "california_housing_test.csv: ValueError: CSV is missing columns ['id', 'negatives', 'positive', 'query']; fix the input and run this cell again (the earlier results of this session and their outputs/ files were removed)."
+    }
+  ],
+  "execution_counts": [],
+  "sequential": null,
+  "executed_sha256": "eb0eb1ee821de5a2d5e9809d3adf847997a62058116bbc9455b0347d99689dae",
+  "log_sequential_complete": true,
+  "mode": "expect_refusal",
+  "refusal_line": "Refused: california_housing_test.csv: ValueError: CSV is missing columns ['id', 'negatives', 'positive', 'query']; fix the input and run this cell again (the earlier results of this session and their outputs/ files were removed).",
+  "halting_cell_index": 8,
+  "halting_cell_id": "qwen3_reranker-18",
+  "error_cells": [
+    8
+  ],
+  "refusal_fail_reasons": [],
+  "refusal_ok": true,
+  "verdict": "PASS"
+}
