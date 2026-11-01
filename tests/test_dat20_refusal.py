@@ -237,6 +237,69 @@ def test_genuine_internal_error_keeps_its_traceback(monkeypatch, tmp_path):
     assert (tmp_path / "outputs" / f"{STEM}_result.json").exists()  # nothing is removed for an internal error
 
 
+# --- the catch is narrow: only bad input is refused; an internal TypeError/KeyError/OSError keeps its traceback ---------
+
+
+def test_the_byod_catch_is_narrow_in_the_notebook_source():
+    source = _cell(BYOD_CELL)
+    branch = source[source.index("try:\n    if USE_BYOD:\n") : source.index(WRAP_END) + len(WRAP_END)]
+    caught = [line.strip() for line in branch.splitlines() if line.strip().startswith("except ")]
+    assert caught == ["except ImportError:", "except OSError as exc:", "except BYODRefusal as exc:", "except ValueError as exc:"], caught
+    assert "        try:\n            records = load_byod_dataset(byod_path)\n        except OSError as exc:\n" in branch
+    assert "\nexcept BYODRefusal as exc:\n    refuse_byod(exc.file_name, exc.reason)\nexcept ValueError as exc:\n    if not USE_BYOD:\n        raise\n" in branch
+
+
+def test_an_unreadable_byod_file_is_still_one_refused_line(monkeypatch, tmp_path):
+    monkeypatch.setitem(sys.modules, "google.colab", None)
+    (tmp_path / "locked.csv").write_text("id,query,positive,negatives\n", encoding="utf-8")
+
+    def unreadable(path):
+        raise PermissionError(13, "Permission denied", str(path))
+
+    with pytest.raises(ValueError) as caught:
+        _section4(monkeypatch, tmp_path, str(tmp_path / "locked.csv"), extra={"load_byod_dataset": unreadable})
+    line = _refusal_line(caught.value)
+    assert line.startswith("Refused: locked.csv: the file cannot be read (PermissionError: "), line
+    assert "earlier results of this session and their outputs/ files were removed" in line
+    assert sorted(p.name for p in (tmp_path / "outputs").iterdir()) == []
+
+
+@pytest.mark.parametrize("error", [TypeError("internal helper bug"), KeyError("internal key"), OSError("internal I/O bug")], ids=["TypeError", "KeyError", "OSError"])
+def test_an_internal_error_after_the_loader_keeps_its_traceback_and_clears_nothing(monkeypatch, tmp_path, error):
+    import traceback
+
+    monkeypatch.setitem(sys.modules, "google.colab", None)
+    (tmp_path / "ok.csv").write_text("id,query,positive,negatives\n", encoding="utf-8")
+
+    def broken_disjoint(splits):
+        raise error
+
+    extra = {
+        "load_byod_dataset": lambda _path: [{"id": "q1"}],
+        "split_dataset": lambda records, **kwargs: {"train": records, "validation": records, "test": records},
+        "validate_dataset": lambda part, **kwargs: {"records": part},
+        "check_split_disjoint": broken_disjoint,
+    }
+    with pytest.raises(type(error)) as caught:
+        _section4(monkeypatch, tmp_path, str(tmp_path / "ok.csv"), extra=extra)
+    assert caught.value is error and not getattr(caught.value, "dimer_refusal", False)
+    rendered = "".join(traceback.format_exception(caught.value))
+    assert rendered.startswith("Traceback") and "broken_disjoint" in rendered and "Refused:" not in rendered
+    assert (tmp_path / "outputs" / f"{STEM}_result.json").exists()  # nothing is removed for an internal error
+
+
+def test_a_typeerror_inside_the_loader_is_not_turned_into_a_refusal(monkeypatch, tmp_path):
+    monkeypatch.setitem(sys.modules, "google.colab", None)
+    (tmp_path / "ok.csv").write_text("id,query,positive,negatives\n", encoding="utf-8")
+
+    def buggy_loader(_path):
+        raise TypeError("loader bug")
+
+    with pytest.raises(TypeError, match="loader bug") as caught:
+        _section4(monkeypatch, tmp_path, str(tmp_path / "ok.csv"), extra={"load_byod_dataset": buggy_loader})
+    assert not getattr(caught.value, "dimer_refusal", False)
+
+
 def test_sample_path_errors_are_not_refusals(monkeypatch, tmp_path):
     def broken(*args, **kwargs):
         raise ValueError("pinned corpus digest mismatch")
