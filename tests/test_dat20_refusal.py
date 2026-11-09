@@ -179,6 +179,8 @@ def _cases(tmp_path: Path) -> dict:
     (tmp_path / "california_housing_test.csv").write_text("longitude,latitude,median_house_value\n-122.05,37.37,344700.0\n", encoding="utf-8")
     (tmp_path / "bad.json").write_text("{not json", encoding="utf-8")
     (tmp_path / "few.csv").write_text("id,query,positive,negatives\nq1,hello,doc a,doc b\n", encoding="utf-8")
+    (tmp_path / "short.csv").write_text("id,query,positive,negatives\nq1,hello,doc a,doc b\nq2,short row\n", encoding="utf-8")
+    (tmp_path / "long.csv").write_text("id,query,positive,negatives\nq1,hello, world,doc a,doc b\n", encoding="utf-8")
     (tmp_path / "folder").mkdir()
     return {
         "wrong columns (the scripted sample_data CSV)": ("california_housing_test.csv", "CSV is missing columns"),
@@ -186,10 +188,12 @@ def _cases(tmp_path: Path) -> dict:
         "too few records": ("few.csv", "ValueError"),
         "folder": ("folder", "is not a file"),
         "missing": ("nope.csv", "is not a file"),
+        "short row": ("short.csv", "CSV data row 2 has 2 fields, the header has 4"),
+        "long row (unquoted comma)": ("long.csv", "CSV data row 1 has 5 fields, the header has 4"),
     }
 
 
-@pytest.mark.parametrize("case", ["wrong columns (the scripted sample_data CSV)", "invalid JSON", "too few records", "folder", "missing"])
+@pytest.mark.parametrize("case", ["wrong columns (the scripted sample_data CSV)", "invalid JSON", "too few records", "folder", "missing", "short row", "long row (unquoted comma)"])
 def test_byod_problems_are_one_refused_line_and_remove_earlier_results(monkeypatch, tmp_path, case):
     monkeypatch.setitem(sys.modules, "google.colab", None)
     file_name, rule = _cases(tmp_path)[case]
