@@ -538,6 +538,16 @@ def load_byod_dataset(path: str | Path) -> list[dict[str, Any]]:
         missing = {"id", "query", "positive", "negatives"} - set(rows[0].keys() if rows else set())
         if missing:
             raise ValueError(f"CSV is missing columns {sorted(missing)}")
+        # DictReader pads a short row with None and files a long row's surplus under the key None. Either way
+        # the row lacks the header's fields (often an unquoted comma): refuse it rather than misread it.
+        width = len(rows[0]) - (None in rows[0])
+        for number, r in enumerate(rows, start=1):
+            if None in r or None in r.values():
+                fields = sum(v is not None for k, v in r.items() if k is not None) + len(r.get(None) or [])
+                raise ValueError(
+                    f"CSV data row {number} has {fields} fields, the header has {width}: quote any field that"
+                    " contains a comma"
+                )
         return [
             {
                 "id": r["id"],

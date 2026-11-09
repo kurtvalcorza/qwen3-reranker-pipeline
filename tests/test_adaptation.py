@@ -324,6 +324,16 @@ def test_byod_csv_json_jsonl_round_trip_and_rejections(tmp_path, forbid_model_im
     (tmp_path / "bad.csv").write_text("id,query,positive\nx,y,z\n", encoding="utf-8")
     with pytest.raises(ValueError, match="missing columns"):
         load_byod_dataset(tmp_path / "bad.csv")
+    # a short row is padded with None and a long row's surplus lands under None: both refuse, naming the row
+    (tmp_path / "short.csv").write_text("id,query,positive,negatives\nq1,a,b,c\nq2,two\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="CSV data row 2 has 2 fields, the header has 4"):
+        load_byod_dataset(tmp_path / "short.csv")
+    (tmp_path / "long.csv").write_text("id,query,positive,negatives\nq1,a, b,c,d\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="CSV data row 1 has 5 fields, the header has 4"):
+        load_byod_dataset(tmp_path / "long.csv")
+    (tmp_path / "empty_negatives.csv").write_text("id,query,positive,negatives\nq1,a,b,\n", encoding="utf-8")
+    # an empty trailing field is not a short row
+    assert load_byod_dataset(tmp_path / "empty_negatives.csv")[0]["negatives"] == []
     (tmp_path / "obj.json").write_text('{"records": []}', encoding="utf-8")
     with pytest.raises(ValueError, match="array of records"):
         load_byod_dataset(tmp_path / "obj.json")
